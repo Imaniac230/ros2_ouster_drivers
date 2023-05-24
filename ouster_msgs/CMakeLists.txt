@@ -8,7 +8,6 @@ find_package(std_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/GetMetadata.srv"
-  "msg/Metadata.msg"
   DEPENDENCIES builtin_interfaces std_msgs
 )
 

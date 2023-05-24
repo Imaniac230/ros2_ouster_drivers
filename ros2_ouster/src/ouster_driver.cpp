@@ -108,27 +108,29 @@ void OusterDriver::onConfigure()
     exit(-1);
   }
 
-  ros2_ouster::Metadata mdata = _sensor->getMetadata();
+  _sensor->updateConfigAndMetadata();
 
   if (_use_system_default_qos) {
     RCLCPP_INFO(
       this->get_logger(), "Using system defaults QoS for sensor data");
     _data_processors = ros2_ouster::createProcessors(
-      shared_from_this(), mdata, _imu_data_frame, _laser_data_frame,
+      shared_from_this(), _sensor->getMetadata(), _imu_data_frame, _laser_data_frame,
       rclcpp::SystemDefaultsQoS(), _os1_proc_mask);
   } else {
     _data_processors = ros2_ouster::createProcessors(
-      shared_from_this(), mdata, _imu_data_frame, _laser_data_frame,
+      shared_from_this(), _sensor->getMetadata(), _imu_data_frame, _laser_data_frame,
       rclcpp::SensorDataQoS(), _os1_proc_mask);
   }
 
   _tf_b = std::make_unique<tf2_ros::StaticTransformBroadcaster>(
     shared_from_this());
-  broadcastStaticTransforms(mdata);
+  broadcastStaticTransforms(_sensor->getSensorInfo());
 }
 
 void OusterDriver::onActivate()
 {
+  _sensor->allocateBuffers();
+
   DataProcessorMapIt it;
   for (it = _data_processors.begin(); it != _data_processors.end(); ++it) {
     it->second->onActivate();
@@ -178,17 +180,17 @@ void OusterDriver::onShutdown()
 }
 
 void OusterDriver::broadcastStaticTransforms(
-  const ros2_ouster::Metadata & mdata)
+  const OS1::sensor_info & info_data)
 {
   if (_tf_b) {
     std::vector<geometry_msgs::msg::TransformStamped> transforms;
     transforms.push_back(
       toMsg(
-        mdata.imu_to_sensor_transform,
+        info_data.imu_to_sensor_transform,
         _laser_sensor_frame, _imu_data_frame, this->now()));
     transforms.push_back(
       toMsg(
-        mdata.lidar_to_sensor_transform,
+        info_data.lidar_to_sensor_transform,
         _laser_sensor_frame, _laser_data_frame, this->now()));
     _tf_b->sendTransform(transforms);
   }
@@ -259,8 +261,7 @@ uint8_t * OusterDriver::handlePacket(const ros2_ouster::State state) {
   }
 
   _packet_error_count = 0;
-  if (state == ros2_ouster::State::LIDAR_DATA && is_non_legacy_lidar_profile(info) &&
-      init_id_changed(pf, packet_data)) {
+  if (_sensor->shouldReset(packet_data)) {
     // TODO: short circut reset if no breaking changes occured?
     RCLCPP_WARN(get_logger(),
                 "sensor init_id has changed! reactivating..");

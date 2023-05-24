@@ -14,10 +14,10 @@
 #ifndef ROS2_OUSTER__OS1__PROCESSORS__SCAN_PROCESSOR_HPP_
 #define ROS2_OUSTER__OS1__PROCESSORS__SCAN_PROCESSOR_HPP_
 
-#include <vector>
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "rclcpp/qos.hpp"
 
@@ -39,7 +39,7 @@ namespace OS1
  */
 class ScanProcessor : public ros2_ouster::DataProcessorInterface
 {
-public:
+  public:
   using OSScan = std::vector<scan_os::ScanOS>;
   using OSScanIt = OSScan::iterator;
 
@@ -49,61 +49,52 @@ public:
    * @param mdata metadata about the sensor
    * @param frame frame_id to use for messages
    */
-  ScanProcessor(
-    const rclcpp_lifecycle::LifecycleNode::SharedPtr node,
-    const ros2_ouster::Metadata & mdata,
-    const std::string & frame,
-    const rclcpp::QoS & qos)
-  : DataProcessorInterface(), _node(node), _frame(frame)
+  ScanProcessor(const rclcpp_lifecycle::LifecycleNode::SharedPtr node,
+                const std::string &mdata, const std::string &frame,
+                const rclcpp::QoS &qos)
+      : DataProcessorInterface(), _node(node), _frame(frame),
+        _info(OS1::parse_metadata(mdata)), _pf(OS1::get_format(_info))
   {
-    _mdata = mdata;
     _pub = _node->create_publisher<sensor_msgs::msg::LaserScan>("scan", qos);
-    _height = OS1::pixels_per_column;
-    _width = OS1::n_cols_of_lidar_mode(
-      OS1::lidar_mode_of_string(mdata.mode));
-    _xyz_lut = OS1::make_xyz_lut(
-      _width, _height, mdata.beam_azimuth_angles, mdata.beam_altitude_angles);
+    _height = _pf.pixels_per_column;
+    _width = OS1::n_cols_of_lidar_mode(_info.mode);
+    _xyz_lut = OS1::make_xyz_lut(_width, _height, _info.beam_azimuth_angles,
+                                 _info.beam_altitude_angles);
     _aggregated_scans.resize(_width * _height);
 
     double zero_angle = 9999.0;
     _ring = 0;
-    for (uint i = 0; i != _mdata.beam_altitude_angles.size(); i++) {
-      if (fabs(_mdata.beam_altitude_angles[i]) < zero_angle) {
+    for (uint i = 0; i != _info.beam_altitude_angles.size(); i++) {
+      if (fabs(_info.beam_altitude_angles[i]) < zero_angle) {
         _ring = static_cast<uint8_t>(i);
-        zero_angle = fabs(_mdata.beam_altitude_angles[i]);
+        zero_angle = fabs(_info.beam_altitude_angles[i]);
       }
     }
 
-    _batch_and_publish =
-      OS1::batch_to_iter<OSScanIt>(
-      _xyz_lut, _width, _height, {}, &scan_os::ScanOS::make,
-      [&](uint64_t scan_ts) mutable
-      {
-        if (_pub->get_subscription_count() > 0 && _pub->is_activated()) {
-          auto msg_ptr =
-          std::make_unique<sensor_msgs::msg::LaserScan>(
-            std::move(
-              ros2_ouster::toMsg(
-                _aggregated_scans, std::chrono::nanoseconds(scan_ts),
-                _frame, _mdata, _ring)));
-          _pub->publish(std::move(msg_ptr));
-        }
-      });
+    _batch_and_publish = OS1::batch_to_iter<OSScanIt>(
+            _xyz_lut, _width, _height, {}, &scan_os::ScanOS::make,
+            [&](uint64_t scan_ts) mutable {
+              if (_pub->get_subscription_count() > 0 && _pub->is_activated()) {
+                auto msg_ptr = std::make_unique<sensor_msgs::msg::LaserScan>(
+                        std::move(ros2_ouster::toMsg(
+                                _aggregated_scans,
+                                std::chrono::nanoseconds(scan_ts), _frame,
+                                mdata, _ring)));
+                _pub->publish(std::move(msg_ptr));
+              }
+            });
   }
 
   /**
    * @brief A destructor clearing memory allocated
    */
-  ~ScanProcessor()
-  {
-    _pub.reset();
-  }
+  ~ScanProcessor() { _pub.reset(); }
 
   /**
    * @brief Process method to create scan
    * @param data the packet data
    */
-  bool process(uint8_t * data, uint64_t override_ts) override
+  bool process(uint8_t *data, uint64_t override_ts) override
   {
     OSScanIt it = _aggregated_scans.begin();
     _batch_and_publish(data, it, override_ts);
@@ -113,33 +104,30 @@ public:
   /**
    * @brief Activating processor from lifecycle state transitions
    */
-  void onActivate() override
-  {
-    _pub->on_activate();
-  }
+  void onActivate() override { _pub->on_activate(); }
 
   /**
    * @brief Deactivating processor from lifecycle state transitions
    */
-  void onDeactivate() override
-  {
-    _pub->on_deactivate();
-  }
+  void onDeactivate() override { _pub->on_deactivate(); }
 
-private:
-  rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::LaserScan>::SharedPtr _pub;
+  private:
+  rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::LaserScan>::SharedPtr
+          _pub;
   std::function<void(const uint8_t *, OSScanIt, uint64_t)> _batch_and_publish;
   std::shared_ptr<pcl::PointCloud<scan_os::ScanOS>> _cloud;
   rclcpp_lifecycle::LifecycleNode::SharedPtr _node;
   std::vector<double> _xyz_lut;
-  ros2_ouster::Metadata _mdata;
   OSScan _aggregated_scans;
   std::string _frame;
   uint32_t _height;
   uint32_t _width;
   uint8_t _ring;
+  //TODO(OS1-data): abstract this away to make ti independent of the OS1 structs?
+  OS1::sensor_info _info;
+  OS1::packet_format _pf;
 };
 
-}  // namespace OS1
+}// namespace OS1
 
-#endif  // ROS2_OUSTER__OS1__PROCESSORS__SCAN_PROCESSOR_HPP_
+#endif// ROS2_OUSTER__OS1__PROCESSORS__SCAN_PROCESSOR_HPP_

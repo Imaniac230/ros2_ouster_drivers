@@ -39,10 +39,9 @@
 
 #include "ros2_ouster/OS1/OS1_base_factory.hpp"
 #include "ros2_ouster/OS1/OS1_base_interface.hpp"
-#include "ros2_ouster/OS1/OS1_packet.hpp"
 #include "ros2_ouster/OS1/OS1_types.hpp"
 #include "ros2_ouster/OS1/OS1_util.hpp"
-#include "ros2_ouster/interfaces/metadata.hpp"
+#include "ros2_ouster/interfaces/common.hpp"
 #include "json/json.h"
 
 namespace OS1
@@ -59,9 +58,6 @@ struct client {
     close(imu_fd);
   }
 };
-
-const size_t lidar_packet_bytes = 12608;
-const size_t imu_packet_bytes = 48;
 
 /**
  * Minimum supported version

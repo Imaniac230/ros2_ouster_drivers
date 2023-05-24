@@ -38,8 +38,7 @@
 #include "sys/types.h"
 
 #include "ros2_ouster/OS1/OS1_base_interface.hpp"
-#include "ros2_ouster/OS1/OS1_packet.hpp"
-#include "ros2_ouster/interfaces/metadata.hpp"
+#include "ros2_ouster/interfaces/common.hpp"
 #include "json/json.h"
 
 namespace OS1

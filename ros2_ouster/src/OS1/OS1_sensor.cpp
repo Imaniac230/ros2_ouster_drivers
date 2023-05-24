@@ -16,16 +16,12 @@
 #include "ros2_ouster/OS1/OS1_sensor.hpp"
 #include "ros2_ouster/conversions.hpp"
 #include "ros2_ouster/exception.hpp"
-#include "ros2_ouster/interfaces/metadata.hpp"
+#include "ros2_ouster/interfaces/common.hpp"
 
 namespace OS1
 {
 
-OS1Sensor::OS1Sensor() : SensorInterface()
-{
-  _lidar_packet.resize(lidar_packet_bytes + 1);
-  _imu_packet.resize(imu_packet_bytes + 1);
-}
+OS1Sensor::OS1Sensor() : SensorInterface() {}
 
 OS1Sensor::~OS1Sensor()
 {
@@ -66,6 +62,12 @@ void OS1Sensor::configure(const ros2_ouster::Configuration &config)
   }
 }
 
+void OS1Sensor::allocateBuffers()
+{
+  _lidar_packet.resize(_packet_format->lidar_packet_size + 1);
+  _imu_packet.resize(_packet_format->imu_packet_size + 1);
+}
+
 ros2_ouster::State OS1Sensor::poll()
 {
   _state = poll_client(*_ouster_client);
@@ -86,14 +88,16 @@ uint8_t *OS1Sensor::readPacket()
 {
   switch (_state) {
     case client_state::LIDAR_DATA:
-      if (read_lidar_packet(*_ouster_client, _lidar_packet.data())) {
+      if (read_lidar_packet(*_ouster_client, _lidar_packet.data(),
+                            *_packet_format)) {
         return _lidar_packet.data();
       }
       else {
         return nullptr;
       }
     case client_state::IMU_DATA:
-      if (read_imu_packet(*_ouster_client, _imu_packet.data())) {
+      if (read_imu_packet(*_ouster_client, _imu_packet.data(),
+                          *_packet_format)) {
         return _imu_packet.data();
       }
       else {
@@ -104,14 +108,74 @@ uint8_t *OS1Sensor::readPacket()
   }
 }
 
-ros2_ouster::Metadata OS1Sensor::getMetadata()
+void OS1Sensor::updateConfigAndMetadata()
 {
   if (_ouster_client) {
-    return OS1::parse_metadata(OS1::get_metadata(*_ouster_client));
+    if (!get_config(_ouster_client->hostname, _config)) {
+      std::cerr << "Failed to collect sensor config" << std::endl;
+      _config = {};
+      _metadata.clear();
+      _info = {};
+      _packet_format.reset();
+      return;
+    }
+
+    try {
+      _metadata = OS1::get_metadata(*_ouster_client, 60, false);
+    }
+    catch (const std::exception &e) {
+      std::cerr << "sensor::get_metadata exception: " << e.what() << std::endl;
+      _metadata.clear();
+    }
+    //TODO(get-metadata): can the methods still return empty strings if no exceptions?
+    if (_metadata.empty()) {
+      std::cerr << "Failed to collect sensor metadata" << std::endl;
+      return;
+    }
+
+    _info = OS1::parse_metadata(_metadata);
+    // TODO: revist when *min_version* is changed
+    populate_metadata_defaults(_info, OS1::MODE_UNSPEC);
+    _packet_format = std::make_unique<packet_format>(OS1::get_format(_info));
   }
   else {
-    return {"UNKNOWN", "UNKNOWN", "UNNKOWN", "UNNKOWN", "UNKNOWN", {},
-            {},        {},        {},        7503,      7502};
+    _config = {};
+    _metadata.clear();
+    _info = {};
+    _packet_format.reset();
+  }
+}
+
+// fill in values that could not be parsed from metadata
+void OS1Sensor::populate_metadata_defaults(sensor_info &info,
+                                           lidar_mode specified_lidar_mode)
+{
+  if (info.name.empty()) info.name = "UNKNOWN";
+
+  if (info.sn.empty()) info.sn = "UNKNOWN";
+
+  OS1::version v = OS1::version_of_string(info.fw_rev);
+  if (v == OS1::invalid_version) {
+    std::cerr << "Unknown sensor firmware version; output may not be reliable"
+              << std::endl;
+  }
+  else if (v < OS1::min_version) {
+    std::cerr << "Firmware < " << to_string(OS1::min_version).c_str()
+              << " not supported; output may not be reliable" << std::endl;
+  }
+
+  if (!info.mode) {
+    std::cerr << "Lidar mode not found in metadata; output may not be reliable"
+              << std::endl;
+    info.mode = specified_lidar_mode;
+  }
+
+  if (info.prod_line.empty()) info.prod_line = "UNKNOWN";
+
+  if (info.beam_azimuth_angles.empty() || info.beam_altitude_angles.empty()) {
+    std::cerr << "Beam angles not found in metadata; using design values" << std::endl;
+    info.beam_azimuth_angles = OS1::gen1_azimuth_angles;
+    info.beam_altitude_angles = OS1::gen1_altitude_angles;
   }
 }
 

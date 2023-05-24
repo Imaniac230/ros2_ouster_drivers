@@ -14,9 +14,9 @@
 #ifndef ROS2_OUSTER__OS1__PROCESSORS__IMU_PROCESSOR_HPP_
 #define ROS2_OUSTER__OS1__PROCESSORS__IMU_PROCESSOR_HPP_
 
-#include <vector>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "ros2_ouster/conversions.hpp"
 
@@ -36,19 +36,18 @@ namespace OS1
  */
 class IMUProcessor : public ros2_ouster::DataProcessorInterface
 {
-public:
+  public:
   /**
    * @brief A constructor for OS1::IMUProcessor
    * @param node Node for creating interfaces
    * @param mdata metadata about the sensor
    * @param frame frame_id to use for messages
    */
-  IMUProcessor(
-    const rclcpp_lifecycle::LifecycleNode::SharedPtr node,
-    const ros2_ouster::Metadata & mdata,
-    const std::string & frame,
-    const rclcpp::QoS & qos)
-  : DataProcessorInterface(), _node(node), _frame(frame)
+  IMUProcessor(const rclcpp_lifecycle::LifecycleNode::SharedPtr node,
+               const std::string &mdata, const std::string &frame,
+               const rclcpp::QoS &qos)
+      : DataProcessorInterface(), _node(node), _frame(frame),
+        _info(OS1::parse_metadata(mdata)), _pf(OS1::get_format(_info))
   {
     _pub = node->create_publisher<sensor_msgs::msg::Imu>("imu", qos);
   }
@@ -56,16 +55,13 @@ public:
   /**
    * @brief A destructor clearing memory allocated
    */
-  ~IMUProcessor()
-  {
-    _pub.reset();
-  }
+  ~IMUProcessor() { _pub.reset(); }
 
   /**
    * @brief Process method to create imu
    * @param data the packet data
    */
-  bool process(uint8_t * data, uint64_t override_ts) override
+  bool process(uint8_t *data, uint64_t override_ts) override
   {
     if (_pub->get_subscription_count() > 0 && _pub->is_activated()) {
       _pub->publish(ros2_ouster::toMsg(data, _frame, override_ts));
@@ -76,25 +72,22 @@ public:
   /**
    * @brief Activating processor from lifecycle state transitions
    */
-  void onActivate() override
-  {
-    _pub->on_activate();
-  }
+  void onActivate() override { _pub->on_activate(); }
 
   /**
    * @brief Deactivating processor from lifecycle state transitions
    */
-  void onDeactivate() override
-  {
-    _pub->on_deactivate();
-  }
+  void onDeactivate() override { _pub->on_deactivate(); }
 
-private:
+  private:
   rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::Imu>::SharedPtr _pub;
   rclcpp_lifecycle::LifecycleNode::SharedPtr _node;
   std::string _frame;
+  //TODO(OS1-data): abstract this away to make ti independent of the OS1 structs?
+  OS1::sensor_info _info;
+  OS1::packet_format _pf;
 };
 
-}  // namespace OS1
+}// namespace OS1
 
-#endif  // ROS2_OUSTER__OS1__PROCESSORS__IMU_PROCESSOR_HPP_
+#endif// ROS2_OUSTER__OS1__PROCESSORS__IMU_PROCESSOR_HPP_

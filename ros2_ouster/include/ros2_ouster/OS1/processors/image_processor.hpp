@@ -14,11 +14,11 @@
 #ifndef ROS2_OUSTER__OS1__PROCESSORS__IMAGE_PROCESSOR_HPP_
 #define ROS2_OUSTER__OS1__PROCESSORS__IMAGE_PROCESSOR_HPP_
 
-#include <vector>
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
-#include <algorithm>
+#include <vector>
 
 #include "rclcpp/qos.hpp"
 
@@ -26,8 +26,8 @@
 
 #include "sensor_msgs/msg/image.hpp"
 
-#include "ros2_ouster/interfaces/data_processor_interface.hpp"
 #include "ros2_ouster/OS1/OS1_util.hpp"
+#include "ros2_ouster/interfaces/data_processor_interface.hpp"
 
 namespace OS1
 {
@@ -39,7 +39,7 @@ namespace OS1
  */
 class ImageProcessor : public ros2_ouster::DataProcessorInterface
 {
-public:
+  public:
   using OSImage = std::vector<image_os::ImageOS>;
   using OSImageIt = OSImage::iterator;
 
@@ -49,28 +49,26 @@ public:
    * @param mdata metadata about the sensor
    * @param frame frame_id to use for messages
    */
-  ImageProcessor(
-    const rclcpp_lifecycle::LifecycleNode::SharedPtr node,
-    const ros2_ouster::Metadata & mdata,
-    const std::string & frame,
-    const rclcpp::QoS & qos)
-  : DataProcessorInterface(), _node(node), _frame(frame)
+  ImageProcessor(const rclcpp_lifecycle::LifecycleNode::SharedPtr node,
+                 const std::string &mdata, const std::string &frame,
+                 const rclcpp::QoS &qos)
+      : DataProcessorInterface(), _node(node), _frame(frame),
+        _info(OS1::parse_metadata(mdata)), _pf(OS1::get_format(_info))
   {
-    _height = OS1::pixels_per_column;
-    _width = OS1::n_cols_of_lidar_mode(
-      OS1::lidar_mode_of_string(mdata.mode));
+    _height = _pf.pixels_per_column;
+    _width = OS1::n_cols_of_lidar_mode(_info.mode);
     _px_offset = OS1::get_px_offset(_width);
-    _xyz_lut = OS1::make_xyz_lut(
-      _width, _height, mdata.beam_azimuth_angles, mdata.beam_altitude_angles);
+    _xyz_lut = OS1::make_xyz_lut(_width, _height, _info.beam_azimuth_angles,
+                                 _info.beam_altitude_angles);
 
     _range_image_pub = _node->create_publisher<sensor_msgs::msg::Image>(
-      "range_image", qos);
+            "range_image", qos);
     _intensity_image_pub = _node->create_publisher<sensor_msgs::msg::Image>(
-      "intensity_image", qos);
+            "intensity_image", qos);
     _noise_image_pub = _node->create_publisher<sensor_msgs::msg::Image>(
-      "noise_image", qos);
+            "noise_image", qos);
     _reflectivity_image_pub = _node->create_publisher<sensor_msgs::msg::Image>(
-      "reflectivity_image", qos);
+            "reflectivity_image", qos);
 
     _range_image.width = _width;
     _range_image.height = _height;
@@ -102,60 +100,56 @@ public:
 
     _information_image.resize(_width * _height);
 
-    _batch_and_publish =
-      OS1::batch_to_iter<OSImageIt>(
-      _xyz_lut, _width, _height, {}, &image_os::ImageOS::make,
-      [&](uint64_t scan_ts) mutable
-      {
-        rclcpp::Time t(scan_ts);
-        _range_image.header.stamp = t;
-        _noise_image.header.stamp = t;
-        _intensity_image.header.stamp = t;
-        _reflectivity_image.header.stamp = t;
+    _batch_and_publish = OS1::batch_to_iter<OSImageIt>(
+            _xyz_lut, _width, _height, {}, &image_os::ImageOS::make,
+            [&](uint64_t scan_ts) mutable {
+              rclcpp::Time t(scan_ts);
+              _range_image.header.stamp = t;
+              _noise_image.header.stamp = t;
+              _intensity_image.header.stamp = t;
+              _reflectivity_image.header.stamp = t;
 
-        OSImageIt it;
-        for (uint u = 0; u != _height; u++) {
-          for (uint v = 0; v != _width; v++) {
-            const size_t vv = (v + _px_offset[u]) % _width;
-            const size_t index = vv * _height + u;
-            image_os::ImageOS & px = _information_image[index];
+              OSImageIt it;
+              for (uint u = 0; u != _height; u++) {
+                for (uint v = 0; v != _width; v++) {
+                  const size_t vv = (v + _px_offset[u]) % _width;
+                  const size_t index = vv * _height + u;
+                  image_os::ImageOS &px = _information_image[index];
 
-            const uint & idx = u * _width + v;
-            if (px.range == 0) {
-              _range_image.data[idx] = 0;
-            } else {
-              _range_image.data[idx] = 255 - std::min(std::round(px.range * 5e-3), 255.0);
-            }
-            _noise_image.data[idx] = std::min(px.noise, static_cast<uint16_t>(255));
-            _intensity_image.data[idx] = std::min(px.intensity, 255.0f);
-            _reflectivity_image.data[idx] = std::min(px.reflectivity, static_cast<uint16_t>(255));
-          }
-        }
+                  const uint &idx = u * _width + v;
+                  if (px.range == 0) { _range_image.data[idx] = 0; }
+                  else {
+                    _range_image.data[idx] =
+                            255 - std::min(std::round(px.range * 5e-3), 255.0);
+                  }
+                  _noise_image.data[idx] =
+                          std::min(px.noise, static_cast<uint16_t>(255));
+                  _intensity_image.data[idx] = std::min(px.intensity, 255.0f);
+                  _reflectivity_image.data[idx] =
+                          std::min(px.reflectivity, static_cast<uint16_t>(255));
+                }
+              }
 
-        if (_range_image_pub->get_subscription_count() > 0 &&
-        _range_image_pub->is_activated())
-        {
-          _range_image_pub->publish(_range_image);
-        }
+              if (_range_image_pub->get_subscription_count() > 0 &&
+                  _range_image_pub->is_activated()) {
+                _range_image_pub->publish(_range_image);
+              }
 
-        if (_noise_image_pub->get_subscription_count() > 0 &&
-        _noise_image_pub->is_activated())
-        {
-          _noise_image_pub->publish(_noise_image);
-        }
+              if (_noise_image_pub->get_subscription_count() > 0 &&
+                  _noise_image_pub->is_activated()) {
+                _noise_image_pub->publish(_noise_image);
+              }
 
-        if (_intensity_image_pub->get_subscription_count() > 0 &&
-        _intensity_image_pub->is_activated())
-        {
-          _intensity_image_pub->publish(_intensity_image);
-        }
+              if (_intensity_image_pub->get_subscription_count() > 0 &&
+                  _intensity_image_pub->is_activated()) {
+                _intensity_image_pub->publish(_intensity_image);
+              }
 
-        if (_reflectivity_image_pub->get_subscription_count() > 0 &&
-        _reflectivity_image_pub->is_activated())
-        {
-          _reflectivity_image_pub->publish(_reflectivity_image);
-        }
-      });
+              if (_reflectivity_image_pub->get_subscription_count() > 0 &&
+                  _reflectivity_image_pub->is_activated()) {
+                _reflectivity_image_pub->publish(_reflectivity_image);
+              }
+            });
   }
 
   /**
@@ -173,7 +167,7 @@ public:
    * @brief Process method to create images
    * @param data the packet data
    */
-  bool process(uint8_t * data, uint64_t override_ts) override
+  bool process(uint8_t *data, uint64_t override_ts) override
   {
     OSImageIt it = _information_image.begin();
     _batch_and_publish(data, it, override_ts);
@@ -202,11 +196,15 @@ public:
     _noise_image_pub->on_deactivate();
   }
 
-private:
-  rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::Image>::SharedPtr _reflectivity_image_pub;
-  rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::Image>::SharedPtr _intensity_image_pub;
-  rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::Image>::SharedPtr _range_image_pub;
-  rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::Image>::SharedPtr _noise_image_pub;
+  private:
+  rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::Image>::SharedPtr
+          _reflectivity_image_pub;
+  rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::Image>::SharedPtr
+          _intensity_image_pub;
+  rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::Image>::SharedPtr
+          _range_image_pub;
+  rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::Image>::SharedPtr
+          _noise_image_pub;
   std::function<void(const uint8_t *, OSImageIt, uint64_t)> _batch_and_publish;
   rclcpp_lifecycle::LifecycleNode::SharedPtr _node;
   sensor_msgs::msg::Image _reflectivity_image;
@@ -219,8 +217,11 @@ private:
   std::string _frame;
   uint32_t _height;
   uint32_t _width;
+  //TODO(OS1-data): abstract this away to make ti independent of the OS1 structs?
+  OS1::sensor_info _info;
+  OS1::packet_format _pf;
 };
 
-}  // namespace OS1
+}// namespace OS1
 
-#endif  // ROS2_OUSTER__OS1__PROCESSORS__IMAGE_PROCESSOR_HPP_
+#endif// ROS2_OUSTER__OS1__PROCESSORS__IMAGE_PROCESSOR_HPP_

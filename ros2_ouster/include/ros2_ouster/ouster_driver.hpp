@@ -30,7 +30,7 @@
 
 #include "tf2_ros/static_transform_broadcaster.h"
 
-#include "ros2_ouster/interfaces/configuration.hpp"
+#include "ros2_ouster/interfaces/common.hpp"
 #include "ros2_ouster/interfaces/data_processor_interface.hpp"
 
 namespace ros2_ouster
@@ -107,7 +107,8 @@ private:
   /**
    * @brief Create TF2 frames for the lidar sensor
    */
-  void broadcastStaticTransforms(const ros2_ouster::Metadata & mdata);
+   //TODO(tf): abstract this away so that it's not dependent on the OS1 struct ?
+  void broadcastStaticTransforms(const OS1::sensor_info & info_data);
 
   void handlePollError();
 

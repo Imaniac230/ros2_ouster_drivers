@@ -1159,7 +1159,7 @@ class packet_format final
   std::vector<std::pair<ChanField, ChanFieldType>> field_types_;
 
   public:
-  packet_format(
+  explicit packet_format(
           const sensor_info &info);//< create packet_format from sensor_info
 
   using FieldIter =

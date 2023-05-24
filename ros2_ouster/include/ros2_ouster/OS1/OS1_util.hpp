@@ -20,7 +20,7 @@
 #include <iterator>
 #include <vector>
 
-#include "ros2_ouster/OS1/OS1_packet.hpp"
+#include <ros2_ouster/OS1/OS1_types.hpp>
 
 namespace OS1
 {
@@ -126,12 +126,12 @@ std::function<void(const uint8_t *, iterator_type it, uint64_t)> batch_to_iter(
 
   return [ = ](const uint8_t * packet_buf, iterator_type it,
            uint64_t override_ts) mutable {
-           for (int icol = 0; icol < OS1::columns_per_buffer; icol++) {
-             const uint8_t * col_buf = OS1::nth_col(icol, packet_buf);
-             const uint16_t m_id = OS1::col_measurement_id(col_buf);
-             const uint16_t f_id = OS1::col_frame_id(col_buf);
-             const uint64_t ts = OS1::col_timestamp(col_buf);
-             const bool valid = OS1::col_valid(col_buf) == 0xffffffff;
+           for (int icol = 0; icol < columns_per_buffer; icol++) {
+             const uint8_t * col_buf = nth_col(icol, packet_buf);
+             const uint16_t m_id = col_measurement_id(col_buf);
+             const uint16_t f_id = col_frame_id(col_buf);
+             const uint64_t ts = col_timestamp(col_buf);
+             const bool valid = col_valid(col_buf) == 0xffffffff;
 
              // drop invalid / out-of-bounds data in case of misconfiguration
              if (!valid || m_id >= W || f_id + 1 == cur_f_id) {
@@ -162,8 +162,8 @@ std::function<void(const uint8_t *, iterator_type it, uint64_t)> batch_to_iter(
              const int idx = H * m_id;
 
              for (uint8_t ipx = 0; ipx < H; ipx++) {
-               const uint8_t * px_buf = OS1::nth_px(ipx, col_buf);
-               uint32_t r = OS1::px_range(px_buf);
+               const uint8_t * px_buf = nth_px(ipx, col_buf);
+               uint32_t r = px_range(px_buf);
                int ind = 3 * (idx + ipx);
 
                // x, y, z(m), intensity, ts, reflectivity, ring, column,
@@ -172,9 +172,9 @@ std::function<void(const uint8_t *, iterator_type it, uint64_t)> batch_to_iter(
                  r * 0.001f * xyz_lut[ind + 0],
                  r * 0.001f * xyz_lut[ind + 1],
                  r * 0.001f * xyz_lut[ind + 2],
-                 OS1::px_signal_photons(px_buf), ts - scan_ts,
-                 OS1::px_reflectivity(px_buf), ipx, m_id,
-                 OS1::px_noise_photons(px_buf), r);
+                 px_signal(px_buf), ts - scan_ts,
+                 px_reflectivity(px_buf), ipx, m_id,
+                 px_noise_photons(px_buf), r);
              }
            }
          };

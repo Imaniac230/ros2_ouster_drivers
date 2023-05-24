@@ -18,8 +18,6 @@
 #include <utility>
 #include <vector>
 
-#include "ros2_ouster/OS1/OS1_util.hpp"
-
 namespace OS1
 {
 

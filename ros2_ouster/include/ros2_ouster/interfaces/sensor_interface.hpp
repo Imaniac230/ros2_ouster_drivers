@@ -16,9 +16,8 @@
 
 #include <memory>
 
-#include "ros2_ouster/interfaces/configuration.hpp"
+#include "ros2_ouster/interfaces/common.hpp"
 #include "ros2_ouster/interfaces/data_processor_interface.hpp"
-#include "ros2_ouster/interfaces/metadata.hpp"
 
 namespace ros2_ouster
 {
@@ -63,6 +62,11 @@ class SensorInterface
   virtual void configure(const ros2_ouster::Configuration &config) = 0;
 
   /**
+   * @brief Allocate sensor data buffers based on the active configuration
+   */
+   virtual void allocateBuffers() = 0;
+
+  /**
    * @brief Ask sensor to get its current state for data collection
    * @return the state enum value
    */
@@ -76,10 +80,24 @@ class SensorInterface
   virtual uint8_t *readPacket() = 0;
 
   /**
+   * @brief Update and store the currently active sensor config and metadata
+   */
+  virtual void updateConfigAndMetadata() = 0;
+
+  /**
    * @brief Get lidar sensor's metadata
    * @return sensor metadata struct
    */
-  virtual ros2_ouster::Metadata getMetadata() = 0;
+  [[nodiscard]] virtual inline const std::string & getMetadata() const = 0;
+
+  [[nodiscard]] virtual inline const OS1::sensor_info & getSensorInfo() const = 0;
+
+  /**
+   * @brief Indicate whether a reactivation operation is required
+   * @param packet data to read from
+   * @return sensor metadata struct
+   */
+  [[nodiscard]] virtual inline bool shouldReset(const uint8_t * packet) = 0;
 };
 
 }// namespace ros2_ouster

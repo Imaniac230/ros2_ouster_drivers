@@ -17,9 +17,8 @@
 #include <memory>
 #include <string>
 
-#include "ros2_ouster/interfaces/metadata.hpp"
-#include "ros2_ouster/interfaces/configuration.hpp"
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
+#include "ros2_ouster/interfaces/common.hpp"
 
 namespace ros2_ouster
 {

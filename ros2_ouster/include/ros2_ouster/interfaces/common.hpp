@@ -11,16 +11,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ROS2_OUSTER__INTERFACES__METADATA_HPP_
-#define ROS2_OUSTER__INTERFACES__METADATA_HPP_
+#ifndef ROS2_OUSTER__INTERFACES__COMMON_HPP_
+#define ROS2_OUSTER__INTERFACES__COMMON_HPP_
 
-#include <vector>
 #include <string>
-
-#include "ros2_ouster/OS1/OS1_client.hpp"
 
 namespace ros2_ouster
 {
+/**
+ * @brief Configuration parameters to send to Ouster lidar
+ */
+struct Configuration
+{
+  std::string lidar_ip;
+  std::string computer_ip;
+  int imu_port;
+  int lidar_port;
+  std::string lidar_mode;
+  std::string timestamp_mode;
+};
 
 /**
  * @brief client response on current state
@@ -34,24 +43,6 @@ enum State
   EXIT = 8
 };
 
-/**
- * @brief metadata about Ouster lidar sensor
- */
-struct Metadata
-{
-  std::string hostname;
-  std::string sn;
-  std::string fw_rev;
-  std::string mode;
-  std::string timestamp_mode;
-  std::vector<double> beam_azimuth_angles;
-  std::vector<double> beam_altitude_angles;
-  std::vector<double> imu_to_sensor_transform;
-  std::vector<double> lidar_to_sensor_transform;
-  int imu_port;
-  int lidar_port;
-};
-
 }  // namespace ros2_ouster
 
-#endif  // ROS2_OUSTER__INTERFACES__METADATA_HPP_
+#endif  // ROS2_OUSTER__INTERFACES__COMMON_HPP_

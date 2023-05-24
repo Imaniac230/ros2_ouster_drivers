@@ -14,27 +14,28 @@
 #ifndef ROS2_OUSTER__CONVERSIONS_HPP_
 #define ROS2_OUSTER__CONVERSIONS_HPP_
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <vector>
-#include <algorithm>
 
-#include "pcl/point_types.h"
 #include "pcl/point_cloud.h"
+#include "pcl/point_types.h"
 #include "pcl_conversions/pcl_conversions.h"
-#include "ros2_ouster/point_os.hpp"
 #include "ros2_ouster/image_os.hpp"
+#include "ros2_ouster/interfaces/common.hpp"
+#include "ros2_ouster/point_os.hpp"
 #include "ros2_ouster/scan_os.hpp"
 
 #include "geometry_msgs/msg/transform_stamped.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
+#include "std_msgs/msg/string.hpp"
 #include "tf2/LinearMath/Transform.h"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.h"
-#include "ouster_msgs/msg/metadata.hpp"
+#include <tf2_eigen/tf2_eigen.h>
 
 #include "ros2_ouster/OS1/OS1_client.hpp"
-#include "ros2_ouster/OS1/OS1_packet.hpp"
 
 namespace ros2_ouster
 {
@@ -46,74 +47,58 @@ namespace ros2_ouster
  * endian. This is needed to properly stamp the `PointCloud2` ROS message
  * (below).
  */
-static const bool IS_BIGENDIAN = []()
-  {
-    std::uint16_t dummy = 0x1;
-    std::uint8_t * dummy_ptr = reinterpret_cast<std::uint8_t *>(&dummy);
-    return dummy_ptr[0] == 0x1 ? false : true;
-  } ();
+static const bool IS_BIGENDIAN = []() {
+  std::uint16_t dummy = 0x1;
+  auto *dummy_ptr = reinterpret_cast<std::uint8_t *>(&dummy);
+  return dummy_ptr[0] != 0x1;
+}();
 
 /**
  * @brief Convert ClientState to string
  */
-inline std::string toString(const State & state)
+inline std::string toString(const State &state)
 {
   switch (state) {
     case TIMEOUT:
-      return std::string("timeout");
+      return {"timeout"};
     case ERROR:
-      return std::string("error");
+      return {"error"};
     case EXIT:
-      return std::string("exit");
+      return {"exit"};
     case IMU_DATA:
-      return std::string("lidar data");
+      return {"lidar data"};
     case LIDAR_DATA:
-      return std::string("imu data");
+      return {"imu data"};
     default:
-      return std::string("unknown");
+      return {"unknown"};
   }
 }
 
 /**
  * @brief Convert metadata to message format
  */
-inline ouster_msgs::msg::Metadata toMsg(const ros2_ouster::Metadata & mdata)
+inline std_msgs::msg::String toMsg(const std::string &mdata)
 {
-  ouster_msgs::msg::Metadata msg;
-  msg.hostname = mdata.hostname;
-  msg.lidar_mode = mdata.mode;
-  msg.timestamp_mode = mdata.timestamp_mode;
-  msg.beam_azimuth_angles = mdata.beam_azimuth_angles;
-  msg.beam_altitude_angles = mdata.beam_altitude_angles;
-  msg.imu_to_sensor_transform = mdata.imu_to_sensor_transform;
-  msg.lidar_to_sensor_transform = mdata.lidar_to_sensor_transform;
-  msg.serial_no = mdata.sn;
-  msg.firmware_rev = mdata.fw_rev;
-  msg.imu_port = mdata.imu_port;
-  msg.lidar_port = mdata.lidar_port;
+  std_msgs::msg::String msg;
+  msg.data = mdata;
   return msg;
 }
 
 /**
  * @brief Convert transformation to message format
  */
-inline geometry_msgs::msg::TransformStamped toMsg(
-  const std::vector<double> & mat, const std::string & frame,
-  const std::string & child_frame, const rclcpp::Time & time)
+inline geometry_msgs::msg::TransformStamped
+toMsg(const OS1::mat4d &mat, const std::string &frame,
+      const std::string &child_frame, const rclcpp::Time &timestamp)
 {
-  assert(mat.size() == 16);
+  Eigen::Affine3d aff;
+  aff.linear() = mat.block<3, 3>(0, 0);
+  aff.translation() = mat.block<3, 1>(0, 3) * 1e-3;
 
-  tf2::Transform tf;
-
-  tf.setOrigin({mat[3] / 1e3, mat[7] / 1e3, mat[11] / 1e3});
-  tf.setBasis(
-    {mat[0], mat[1], mat[2], mat[4], mat[5], mat[6], mat[8], mat[9], mat[10]});
-
-  geometry_msgs::msg::TransformStamped msg;
-  msg.header.stamp = time;
+  geometry_msgs::msg::TransformStamped msg = tf2::eigenToTransform(aff);
+  msg.header.stamp = timestamp;
   msg.header.frame_id = frame;
   msg.child_frame_id = child_frame;
-  msg.transform = tf2::toMsg(tf);
 
   return msg;
 }
@@ -121,10 +106,8 @@ inline geometry_msgs::msg::TransformStamped toMsg(
 /**
  * @brief Convert IMU to message format
  */
-inline sensor_msgs::msg::Imu toMsg(
-  const uint8_t * buf,
-  const std::string & frame,
-  uint64_t override_ts = 0)
+inline sensor_msgs::msg::Imu toMsg(const uint8_t *buf, const std::string &frame,
+                                   uint64_t override_ts = 0)
 {
   const double standard_g = 9.80665;
   sensor_msgs::msg::Imu m;
@@ -133,8 +116,8 @@ inline sensor_msgs::msg::Imu toMsg(
   m.orientation.z = 0;
   m.orientation.w = 1;
 
-  m.header.stamp = override_ts == 0 ?
-    rclcpp::Time(OS1::imu_gyro_ts(buf)) : rclcpp::Time(override_ts);
+  m.header.stamp = override_ts == 0 ? rclcpp::Time(OS1::imu_gyro_ts(buf))
+                                    : rclcpp::Time(override_ts);
   m.header.frame_id = frame;
 
   m.linear_acceleration.x = OS1::imu_la_x(buf) * standard_g;
@@ -180,10 +163,9 @@ inline sensor_msgs::msg::Imu toMsg(
  * @return A ROS `PointCloud2` message of LiDAR data whose memory buffer is
  *         row-major ordered consistent to the shape of the LiDAR array.
  */
-inline sensor_msgs::msg::PointCloud2 toMsg(
-  const pcl::PointCloud<point_os::PointOS> & cloud,
-  std::chrono::nanoseconds timestamp,
-  const std::string & frame)
+inline sensor_msgs::msg::PointCloud2
+toMsg(const pcl::PointCloud<point_os::PointOS> &cloud,
+      std::chrono::nanoseconds timestamp, const std::string &frame)
 {
   std::size_t pt_size = sizeof(point_os::PointOS);
   std::size_t data_size = pt_size * cloud.points.size();
@@ -193,7 +175,7 @@ inline sensor_msgs::msg::PointCloud2 toMsg(
   cloud2.width = cloud.width;
   cloud2.fields.clear();
   pcl::for_each_type<typename pcl::traits::fieldList<point_os::PointOS>::type>(
-    pcl::detail::FieldAdder<point_os::PointOS>(cloud2.fields));
+          pcl::detail::FieldAdder<point_os::PointOS>(cloud2.fields));
   cloud2.header = cloud.header;
   cloud2.point_step = pt_size;
   cloud2.row_step = static_cast<std::uint32_t>(pt_size * cloud2.width);
@@ -205,10 +187,8 @@ inline sensor_msgs::msg::PointCloud2 toMsg(
     // column-major to row-major conversion
     for (int i = 0; i < cloud.width; ++i) {
       for (int j = 0; j < cloud.height; ++j) {
-        std::memcpy(
-          &cloud2.data[(j * cloud.width + i) * pt_size],
-          &cloud.points[i * cloud.height + j],
-          pt_size);
+        std::memcpy(&cloud2.data[(j * cloud.width + i) * pt_size],
+                    &cloud.points[i * cloud.height + j], pt_size);
       }
     }
   }
@@ -224,12 +204,10 @@ inline sensor_msgs::msg::PointCloud2 toMsg(
 /**
  * @brief Convert Scan to message format
  */
-inline sensor_msgs::msg::LaserScan toMsg(
-  const std::vector<scan_os::ScanOS> & scans,
-  std::chrono::nanoseconds timestamp,
-  const std::string & frame,
-  const ros2_ouster::Metadata & mdata,
-  const uint8_t ring_to_use)
+inline sensor_msgs::msg::LaserScan
+toMsg(const std::vector<scan_os::ScanOS> &scans,
+      std::chrono::nanoseconds timestamp, const std::string &frame,
+      const std::string &mdata, const uint8_t ring_to_use)
 {
   sensor_msgs::msg::LaserScan msg;
   rclcpp::Time t(timestamp.count());
@@ -240,42 +218,54 @@ inline sensor_msgs::msg::LaserScan toMsg(
   msg.range_min = 0.1;
   msg.range_max = 120.0;
 
-  double resolution, rate;
-  if (mdata.mode == "512x10") {
-    resolution = 512.0;
-    rate = 10.0;
-  } else if (mdata.mode == "512x20") {
-    resolution = 512.0;
-    rate = 20.0;
-  } else if (mdata.mode == "1024x10") {
-    resolution = 1024.0;
-    rate = 10.0;
-  } else if (mdata.mode == "1024x20") {
-    resolution = 1024.0;
-    rate = 20.0;
-  } else if (mdata.mode == "2048x10") {
-    resolution = 2048.0;
-    rate = 10.0;
-  } else {
-    std::cout << "Error: Could not determine lidar mode!" << std::endl;
-    resolution = 512.0;
-    rate = 10.0;
+  float resolution, rate;
+  const OS1::lidar_mode mode = OS1::parse_metadata(mdata).mode;
+  switch (mode) {
+    case OS1::lidar_mode::MODE_512x10:
+      resolution = 512.0;
+      rate = 10.0;
+      break;
+    case OS1::lidar_mode::MODE_512x20:
+      resolution = 512.0;
+      rate = 20.0;
+      break;
+    case OS1::lidar_mode::MODE_1024x10:
+      resolution = 1024.0;
+      rate = 10.0;
+      break;
+    case OS1::lidar_mode::MODE_1024x20:
+      resolution = 1024.0;
+      rate = 20.0;
+      break;
+    case OS1::lidar_mode::MODE_2048x10:
+      resolution = 2048.0;
+      rate = 10.0;
+      break;
+    case OS1::MODE_4096x5:
+      resolution = 4096.0;
+      rate = 5.0;
+      break;
+    default:
+      std::cout << "Error: Could not determine lidar mode!" << std::endl;
+      resolution = 512.0;
+      rate = 10.0;
+      break;
   }
 
-  msg.scan_time = 1.0 / rate;
-  msg.time_increment = 1.0 / rate / resolution;
-  msg.angle_increment = 2 * M_PI / resolution;
+  msg.scan_time = 1.0f / rate;
+  msg.time_increment = 1.0f / rate / resolution;
+  msg.angle_increment = 2.0f * M_PIf32 / resolution;
 
-  for (uint i = 0; i != scans.size(); i++) {
-    if (scans[i].ring == ring_to_use) {
-      msg.ranges.push_back(scans[i].range * 5e-3);
-      msg.intensities.push_back(std::min(scans[i].intensity, 255.0f));
+  for (auto scan : scans) {
+    if (scan.ring == ring_to_use) {
+      msg.ranges.push_back(static_cast<float>(scan.range * 5e-3));
+      msg.intensities.push_back(std::min(scan.intensity, 255.0f));
     }
   }
 
   return msg;
 }
 
-}  // namespace ros2_ouster
+}// namespace ros2_ouster
 
-#endif  // ROS2_OUSTER__CONVERSIONS_HPP_
+#endif// ROS2_OUSTER__CONVERSIONS_HPP_
