@@ -25,9 +25,9 @@
 
 #include "sensor_msgs/msg/point_cloud2.hpp"
 
-#include "ros2_ouster/interfaces/data_processor_interface.hpp"
-#include "ros2_ouster/OS1/OS1.hpp"
+#include "ros2_ouster/OS1/OS1_client.hpp"
 #include "ros2_ouster/OS1/OS1_util.hpp"
+#include "ros2_ouster/interfaces/data_processor_interface.hpp"
 
 namespace OS1
 {

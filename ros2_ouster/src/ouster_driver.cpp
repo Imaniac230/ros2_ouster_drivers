@@ -197,13 +197,18 @@ void OusterDriver::broadcastStaticTransforms(
 void OusterDriver::processData()
 {
   try {
-    ClientState state = _sensor->get();
+    State state = _sensor->poll();
     RCLCPP_DEBUG(
       this->get_logger(),
       "Packet with state: %s",
       ros2_ouster::toString(state).c_str());
 
-    uint8_t * packet_data = _sensor->readPacket(state);
+    if (state == State::EXIT) {
+      handlePollError();
+      return;
+    }
+
+    uint8_t * packet_data = handlePacket(state);
 
     if (packet_data) {
       std::pair<DataProcessorMapIt, DataProcessorMapIt> key_its;
@@ -211,7 +216,7 @@ void OusterDriver::processData()
       uint64_t override_ts =
         this->_use_ros_time ? this->now().nanoseconds() : 0;
 
-      for (DataProcessorMapIt it = key_its.first; it != key_its.second; it++) {
+      for (auto it = key_its.first; it != key_its.second; it++) {
         it->second->process(packet_data, override_ts);
       }
     }
@@ -220,6 +225,51 @@ void OusterDriver::processData()
       this->get_logger(),
       "Failed to process packet with exception %s.", e.what());
   }
+}
+
+void OusterDriver::handlePollError() {
+  RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 100,
+                       "sensor::poll_client()) returned error");
+  // in case error continues for a while attempt to recover by
+  // performing sensor reset
+  if (++_poll_error_count > _max_poll_error_count) {
+    RCLCPP_ERROR_STREAM(
+            get_logger(),
+            "maximum number of allowed errors from "
+            "sensor::poll_client() reached, performing self reset...");
+    _poll_error_count = 0;
+    _reset_srv.reset();
+  }
+}
+
+uint8_t * OusterDriver::handlePacket(const ros2_ouster::State state) {
+  uint8_t * packet_data = _sensor->readPacket();
+
+  if (!packet_data) {
+    if (++_packet_error_count > _max_packet_error_count) {
+      RCLCPP_ERROR_STREAM(
+              get_logger(),
+              "maximum number of allowed errors from "
+              "sensor::read_lidar_packet() reached, reactivating...");
+      _packet_error_count = 0;
+      //TODO(reset): perform only a reactivation instead of a full reset
+      _reset_srv.reset();
+    }
+    return nullptr;
+  }
+
+  _packet_error_count = 0;
+  if (state == ros2_ouster::State::LIDAR_DATA && is_non_legacy_lidar_profile(info) &&
+      init_id_changed(pf, packet_data)) {
+    // TODO: short circut reset if no breaking changes occured?
+    RCLCPP_WARN(get_logger(),
+                "sensor init_id has changed! reactivating..");
+    //TODO(reset): perform only a reactivation instead of a full reset
+    _reset_srv.reset();
+    return nullptr;
+  }
+
+  return packet_data;
 }
 
 void OusterDriver::resetService(

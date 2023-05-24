@@ -19,16 +19,34 @@
 
 #include "ros2_ouster/OS1/processor_factories.hpp"
 
+#include "ros2_ouster/OS1/OS1_client.hpp"
 #include "ros2_ouster/interfaces/data_processor_interface.hpp"
 #include "ros2_ouster/interfaces/sensor_interface.hpp"
-#include "ros2_ouster/OS1/OS1.hpp"
 
 namespace OS1
 {
 
+inline ros2_ouster::State as_ouster_state(const client_state &right)
+{
+  switch (right) {
+    case client_state::TIMEOUT:
+      return ros2_ouster::State::TIMEOUT;
+    case CLIENT_ERROR:
+      return ros2_ouster::State::ERROR;
+    case LIDAR_DATA:
+      return ros2_ouster::State::LIDAR_DATA;
+    case IMU_DATA:
+      return ros2_ouster::State::IMU_DATA;
+    case EXIT:
+      return ros2_ouster::State::EXIT;
+    default:
+      return ros2_ouster::State::ERROR;
+  }
+}
+
 class OS1Sensor : public ros2_ouster::SensorInterface
 {
-public:
+  public:
   OS1Sensor();
 
   ~OS1Sensor() override;
@@ -37,13 +55,13 @@ public:
    * @brief Reset lidar sensor
    * @param configuration file to use
    */
-  void reset(const ros2_ouster::Configuration & config) override;
+  void reset(const ros2_ouster::Configuration &config) override;
 
   /**
    * @brief Configure lidar sensor
    * @param configuration file to use
    */
-  void configure(const ros2_ouster::Configuration & config) override;
+  void configure(const ros2_ouster::Configuration &config) override;
 
   /**
    * @brief Get lidar sensor's metadata
@@ -55,21 +73,22 @@ public:
    * @brief Ask sensor to get its current state for data collection
    * @return the state enum value
    */
-  ros2_ouster::ClientState get() override;
+  ros2_ouster::State poll() override;
 
   /**
    * @brief reading the packet corresponding to the sensor state
    * @param state of the sensor
    * @return the packet of data
    */
-  uint8_t * readPacket(const ros2_ouster::ClientState & state) override;
+  uint8_t *readPacket() override;
 
-private:
+  private:
   std::shared_ptr<client> _ouster_client;
   std::vector<uint8_t> _lidar_packet;
   std::vector<uint8_t> _imu_packet;
+  client_state _state{};
 };
 
-}  // namespace OS1
+}// namespace OS1
 
-#endif  // ROS2_OUSTER__OS1__OS1_SENSOR_HPP_
+#endif// ROS2_OUSTER__OS1__OS1_SENSOR_HPP_

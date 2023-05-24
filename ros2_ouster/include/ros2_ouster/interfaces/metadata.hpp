@@ -17,13 +17,15 @@
 #include <vector>
 #include <string>
 
+#include "ros2_ouster/OS1/OS1_client.hpp"
+
 namespace ros2_ouster
 {
 
 /**
  * @brief client response on current state
  */
-enum ClientState
+enum State
 {
   TIMEOUT = 0,
   ERROR = 1,

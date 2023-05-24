@@ -33,7 +33,7 @@
 #include "tf2_geometry_msgs/tf2_geometry_msgs.h"
 #include "ouster_msgs/msg/metadata.hpp"
 
-#include "ros2_ouster/OS1/OS1.hpp"
+#include "ros2_ouster/OS1/OS1_client.hpp"
 #include "ros2_ouster/OS1/OS1_packet.hpp"
 
 namespace ros2_ouster
@@ -56,7 +56,7 @@ static const bool IS_BIGENDIAN = []()
 /**
  * @brief Convert ClientState to string
  */
-inline std::string toString(const ClientState & state)
+inline std::string toString(const State & state)
 {
   switch (state) {
     case TIMEOUT:

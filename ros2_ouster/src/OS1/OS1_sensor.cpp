@@ -13,16 +13,15 @@
 
 #include <string>
 
-#include "ros2_ouster/conversions.hpp"
 #include "ros2_ouster/OS1/OS1_sensor.hpp"
+#include "ros2_ouster/conversions.hpp"
 #include "ros2_ouster/exception.hpp"
 #include "ros2_ouster/interfaces/metadata.hpp"
 
 namespace OS1
 {
 
-OS1Sensor::OS1Sensor()
-: SensorInterface()
+OS1Sensor::OS1Sensor() : SensorInterface()
 {
   _lidar_packet.resize(lidar_packet_bytes + 1);
   _imu_packet.resize(imu_packet_bytes + 1);
@@ -35,13 +34,13 @@ OS1Sensor::~OS1Sensor()
   _imu_packet.clear();
 }
 
-void OS1Sensor::reset(const ros2_ouster::Configuration & config)
+void OS1Sensor::reset(const ros2_ouster::Configuration &config)
 {
   _ouster_client.reset();
   configure(config);
 }
 
-void OS1Sensor::configure(const ros2_ouster::Configuration & config)
+void OS1Sensor::configure(const ros2_ouster::Configuration &config)
 {
   if (!OS1::lidar_mode_of_string(config.lidar_mode)) {
     throw ros2_ouster::OusterDriverException(
@@ -50,17 +49,16 @@ void OS1Sensor::configure(const ros2_ouster::Configuration & config)
   }
 
   if (!OS1::timestamp_mode_of_string(config.timestamp_mode)) {
-    throw ros2_ouster::OusterDriverException(
-            std::string(
-              "Invalid timestamp mode %s!", config.timestamp_mode.c_str()));
+    throw ros2_ouster::OusterDriverException(std::string(
+            "Invalid timestamp mode %s!", config.timestamp_mode.c_str()));
     exit(-1);
   }
 
-  _ouster_client = OS1::init_client(
-    config.lidar_ip, config.computer_ip,
-    OS1::lidar_mode_of_string(config.lidar_mode),
-    OS1::timestamp_mode_of_string(config.timestamp_mode),
-    config.lidar_port, config.imu_port);
+  _ouster_client =
+          OS1::init_client(config.lidar_ip, config.computer_ip,
+                           OS1::lidar_mode_of_string(config.lidar_mode),
+                           OS1::timestamp_mode_of_string(config.timestamp_mode),
+                           config.lidar_port, config.imu_port);
 
   if (!_ouster_client) {
     throw ros2_ouster::OusterDriverException(
@@ -68,38 +66,37 @@ void OS1Sensor::configure(const ros2_ouster::Configuration & config)
   }
 }
 
-ros2_ouster::ClientState OS1Sensor::get()
+ros2_ouster::State OS1Sensor::poll()
 {
-  const ros2_ouster::ClientState state = OS1::poll_client(*_ouster_client);
+  _state = poll_client(*_ouster_client);
 
-  if (state == ros2_ouster::ClientState::EXIT) {
-    throw ros2_ouster::OusterDriverException(
-            std::string(
-              "Failed to get valid sensor data "
-              "information from lidar, returned exit!"));
-  } else if (state == ros2_ouster::ClientState::ERROR) {
-    throw ros2_ouster::OusterDriverException(
-            std::string(
-              "Failed to get valid sensor data "
-              "information from lidar, returned error!"));
+  if (_state == client_state::EXIT) {
+    std::cerr << "poll_client: caught signal, exiting!" << std::endl;
+  }
+  else if (_state == client_state::CLIENT_ERROR) {
+    std::cerr << "Failed to get valid sensor data "
+                 "information from lidar, returned error!"
+              << std::endl;
   }
 
-  return state;
+  return as_ouster_state(_state);
 }
 
-uint8_t * OS1Sensor::readPacket(const ros2_ouster::ClientState & state)
+uint8_t *OS1Sensor::readPacket()
 {
-  switch (state) {
-    case ros2_ouster::ClientState::LIDAR_DATA:
+  switch (_state) {
+    case client_state::LIDAR_DATA:
       if (read_lidar_packet(*_ouster_client, _lidar_packet.data())) {
         return _lidar_packet.data();
-      } else {
+      }
+      else {
         return nullptr;
       }
-    case ros2_ouster::ClientState::IMU_DATA:
+    case client_state::IMU_DATA:
       if (read_imu_packet(*_ouster_client, _imu_packet.data())) {
         return _imu_packet.data();
-      } else {
+      }
+      else {
         return nullptr;
       }
     default:
@@ -111,10 +108,11 @@ ros2_ouster::Metadata OS1Sensor::getMetadata()
 {
   if (_ouster_client) {
     return OS1::parse_metadata(OS1::get_metadata(*_ouster_client));
-  } else {
-    return {"UNKNOWN", "UNKNOWN", "UNNKOWN", "UNNKOWN", "UNKNOWN",
-      {}, {}, {}, {}, 7503, 7502};
+  }
+  else {
+    return {"UNKNOWN", "UNKNOWN", "UNNKOWN", "UNNKOWN", "UNKNOWN", {},
+            {},        {},        {},        7503,      7502};
   }
 }
 
-}  // namespace OS1
+}// namespace OS1

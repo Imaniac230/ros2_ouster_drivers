@@ -18,6 +18,8 @@ find_package(PCL REQUIRED COMPONENTS common)
 
 find_package(jsoncpp REQUIRED)
 
+set(CMAKE_CXX_STANDARD 17)
+
 include_directories(
   include
   ${PCL_INCLUDE_DIRS}
@@ -46,6 +48,8 @@ add_library(${library_name} SHARED
   src/ouster_driver.cpp
   src/lifecycle_interface.cpp
   src/OS1/OS1_sensor.cpp
+  src/OS1/OS1_types.cpp
+  src/OS1/OS1_parsing.cpp
 )
 
 ament_target_dependencies(${library_name}
