@@ -63,22 +63,17 @@ class PointcloudProcessor : public ros2_ouster::DataProcessorInterface
     _pub = _node->create_publisher<sensor_msgs::msg::PointCloud2>("points",
                                                                   qos);
 
-    _batch_and_publish =
-            OS1::batch_to_iter<pcl::PointCloud<point_os::PointOS>::iterator>(
-                    _xyz_lut, _width, _height, {}, &point_os::PointOS::make,
-                    [&](uint64_t scan_ts) mutable {
-                      if (_pub->get_subscription_count() > 0 &&
-                          _pub->is_activated()) {
-                        auto msg_ptr =
-                                std::make_unique<sensor_msgs::msg::PointCloud2>(
-                                        std::move(ros2_ouster::toMsg(
-                                                *_cloud,
-                                                std::chrono::nanoseconds(
-                                                        scan_ts),
-                                                _frame)));
-                        _pub->publish(std::move(msg_ptr));
-                      }
-                    });
+    _batch_and_publish = OS1::batch_to_iter<OSCloudIt>(
+            _xyz_lut, _width, _height, _pf, {}, &point_os::PointOS::make,
+            [&](uint64_t scan_ts) mutable {
+              if (_pub->get_subscription_count() > 0 && _pub->is_activated()) {
+                auto msg_ptr = std::make_unique<sensor_msgs::msg::PointCloud2>(
+                        std::move(ros2_ouster::toMsg(
+                                *_cloud, std::chrono::nanoseconds(scan_ts),
+                                _frame)));
+                _pub->publish(std::move(msg_ptr));
+              }
+            });
   }
 
   /**

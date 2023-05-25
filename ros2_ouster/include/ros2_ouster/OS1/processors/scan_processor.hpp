@@ -72,7 +72,7 @@ class ScanProcessor : public ros2_ouster::DataProcessorInterface
     }
 
     _batch_and_publish = OS1::batch_to_iter<OSScanIt>(
-            _xyz_lut, _width, _height, {}, &scan_os::ScanOS::make,
+            _xyz_lut, _width, _height, _pf, {}, &scan_os::ScanOS::make,
             [&](uint64_t scan_ts) mutable {
               if (_pub->get_subscription_count() > 0 && _pub->is_activated()) {
                 auto msg_ptr = std::make_unique<sensor_msgs::msg::LaserScan>(

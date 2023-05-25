@@ -17,7 +17,7 @@ namespace OS1
      *
      * @param[in] hostname hostname of the sensor to communicate with.
      */
-std::unique_ptr<BaseInterface>
+inline std::unique_ptr<BaseInterface>
 BaseInterface::create(const std::string &hostname)
 {
   auto fw = firmware_version(hostname);

@@ -38,18 +38,42 @@ using img_t = Eigen::Array<T, -1, -1, Eigen::RowMajor>;
 using mat4d = Eigen::Matrix<double, 4, 4, Eigen::DontAlign>;
 
 /** Unit of range from sensor packet, in meters. */
-constexpr double range_unit = 0.001;
+static constexpr double range_unit = 0.001;
 
 /** Design values for altitude and azimuth offset angles for gen1 sensors. */
-extern const std::vector<double> gen1_altitude_angles;
+static const std::vector<double> gen1_altitude_angles = {
+        16.611,  16.084,  15.557,  15.029,  14.502,  13.975,  13.447,  12.920,
+        12.393,  11.865,  11.338,  10.811,  10.283,  9.756,   9.229,   8.701,
+        8.174,   7.646,   7.119,   6.592,   6.064,   5.537,   5.010,   4.482,
+        3.955,   3.428,   2.900,   2.373,   1.846,   1.318,   0.791,   0.264,
+        -0.264,  -0.791,  -1.318,  -1.846,  -2.373,  -2.900,  -3.428,  -3.955,
+        -4.482,  -5.010,  -5.537,  -6.064,  -6.592,  -7.119,  -7.646,  -8.174,
+        -8.701,  -9.229,  -9.756,  -10.283, -10.811, -11.338, -11.865, -12.393,
+        -12.920, -13.447, -13.975, -14.502, -15.029, -15.557, -16.084, -16.611,
+};
+
 /** Design values for altitude and azimuth offset angles for gen1 sensors. */
-extern const std::vector<double> gen1_azimuth_angles;
+static const std::vector<double> gen1_azimuth_angles = {
+        3.164, 1.055, -1.055, -3.164, 3.164, 1.055, -1.055, -3.164,
+        3.164, 1.055, -1.055, -3.164, 3.164, 1.055, -1.055, -3.164,
+        3.164, 1.055, -1.055, -3.164, 3.164, 1.055, -1.055, -3.164,
+        3.164, 1.055, -1.055, -3.164, 3.164, 1.055, -1.055, -3.164,
+        3.164, 1.055, -1.055, -3.164, 3.164, 1.055, -1.055, -3.164,
+        3.164, 1.055, -1.055, -3.164, 3.164, 1.055, -1.055, -3.164,
+        3.164, 1.055, -1.055, -3.164, 3.164, 1.055, -1.055, -3.164,
+        3.164, 1.055, -1.055, -3.164, 3.164, 1.055, -1.055, -3.164,
+};
 
 /** Design values for imu and lidar to sensor-frame transforms. */
-extern const mat4d default_imu_to_sensor_transform;
+static const mat4d default_imu_to_sensor_transform =
+        (mat4d() << 1, 0, 0, 6.253, 0, 1, 0, -11.775, 0, 0, 1, 7.645, 0, 0, 0,
+         1)
+                .finished();
 
 /** Design values for imu and lidar to sensor-frame transforms. */
-extern const mat4d default_lidar_to_sensor_transform;
+static const mat4d default_lidar_to_sensor_transform =
+        (mat4d() << -1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1, 36.18, 0, 0, 0, 1)
+                .finished();
 
 /**
  * Constants used for configuration. Refer to the sensor documentation for the
@@ -442,7 +466,7 @@ struct sensor_info {
 template<typename K, typename V, size_t N>
 using Table = std::array<std::pair<K, V>, N>;
 
-extern const Table<lidar_mode, const char *, 7> lidar_mode_strings{
+static constexpr Table<lidar_mode, const char *, 7> lidar_mode_strings{
         {{MODE_UNSPEC, "UNKNOWN"},
          {MODE_512x10, "512x10"},
          {MODE_512x20, "512x20"},
@@ -451,16 +475,16 @@ extern const Table<lidar_mode, const char *, 7> lidar_mode_strings{
          {MODE_2048x10, "2048x10"},
          {MODE_4096x5, "4096x5"}}};
 
-extern const Table<timestamp_mode, const char *, 4> timestamp_mode_strings{
+static constexpr Table<timestamp_mode, const char *, 4> timestamp_mode_strings{
         {{TIME_FROM_UNSPEC, "UNKNOWN"},
          {TIME_FROM_INTERNAL_OSC, "TIME_FROM_INTERNAL_OSC"},
          {TIME_FROM_SYNC_PULSE_IN, "TIME_FROM_SYNC_PULSE_IN"},
          {TIME_FROM_PTP_1588, "TIME_FROM_PTP_1588"}}};
 
-extern const Table<OperatingMode, const char *, 2> operating_mode_strings{
+static constexpr Table<OperatingMode, const char *, 2> operating_mode_strings{
         {{OPERATING_NORMAL, "NORMAL"}, {OPERATING_STANDBY, "STANDBY"}}};
 
-extern const Table<MultipurposeIOMode, const char *, 6>
+static constexpr Table<MultipurposeIOMode, const char *, 6>
         multipurpose_io_mode_strings{
                 {{MULTIPURPOSE_OFF, "OFF"},
                  {MULTIPURPOSE_INPUT_NMEA_UART, "INPUT_NMEA_UART"},
@@ -472,14 +496,14 @@ extern const Table<MultipurposeIOMode, const char *, 6>
                  {MULTIPURPOSE_OUTPUT_FROM_ENCODER_ANGLE,
                   "OUTPUT_FROM_ENCODER_ANGLE"}}};
 
-extern const Table<Polarity, const char *, 2> polarity_strings{
+static constexpr Table<Polarity, const char *, 2> polarity_strings{
         {{POLARITY_ACTIVE_LOW, "ACTIVE_LOW"},
          {POLARITY_ACTIVE_HIGH, "ACTIVE_HIGH"}}};
 
-extern const Table<NMEABaudRate, const char *, 2> nmea_baud_rate_strings{
+static constexpr Table<NMEABaudRate, const char *, 2> nmea_baud_rate_strings{
         {{BAUD_9600, "BAUD_9600"}, {BAUD_115200, "BAUD_115200"}}};
 
-Table<ChanField, const char *, 29> chanfield_strings{{
+static constexpr Table<ChanField, const char *, 29> chanfield_strings{{
         {ChanField::RANGE, "RANGE"},
         {ChanField::RANGE2, "RANGE2"},
         {ChanField::SIGNAL, "SIGNAL"},
@@ -511,76 +535,56 @@ Table<ChanField, const char *, 29> chanfield_strings{{
         {ChanField::RAW32_WORD9, "RAW32_WORD9"},
 }};
 
-Table<UDPProfileLidar, const char *, 5> udp_profile_lidar_strings{{
-        {PROFILE_LIDAR_LEGACY, "LEGACY"},
-        {PROFILE_RNG19_RFL8_SIG16_NIR16_DUAL, "RNG19_RFL8_SIG16_NIR16_DUAL"},
-        {PROFILE_RNG19_RFL8_SIG16_NIR16, "RNG19_RFL8_SIG16_NIR16"},
-        {PROFILE_RNG15_RFL8_NIR8, "RNG15_RFL8_NIR8"},
-        {PROFILE_FIVE_WORD_PIXEL, "FIVE_WORD_PIXEL"},
-}};
+static constexpr Table<UDPProfileLidar, const char *, 5>
+        udp_profile_lidar_strings{{
+                {PROFILE_LIDAR_LEGACY, "LEGACY"},
+                {PROFILE_RNG19_RFL8_SIG16_NIR16_DUAL,
+                 "RNG19_RFL8_SIG16_NIR16_DUAL"},
+                {PROFILE_RNG19_RFL8_SIG16_NIR16, "RNG19_RFL8_SIG16_NIR16"},
+                {PROFILE_RNG15_RFL8_NIR8, "RNG15_RFL8_NIR8"},
+                {PROFILE_FIVE_WORD_PIXEL, "FIVE_WORD_PIXEL"},
+        }};
 
-Table<UDPProfileIMU, const char *, 1> udp_profile_imu_strings{{
+static constexpr Table<UDPProfileIMU, const char *, 1> udp_profile_imu_strings{{
         {PROFILE_IMU_LEGACY, "LEGACY"},
 }};
 
 // TODO: should we name them something better? feel like the most important is
 // SHOT_LIMITING_NORMAL
-Table<ShotLimitingStatus, const char *, 10> shot_limiting_status_strings{{
-        {SHOT_LIMITING_NORMAL, "SHOT_LIMITING_NORMAL"},
-        {SHOT_LIMITING_IMMINENT, "SHOT_LIMITING_IMMINENT"},
-        {SHOT_LIMITING_REDUCTION_0_10, "SHOT_LIMITING_REDUCTION_0_10"},
-        {SHOT_LIMITING_REDUCTION_10_20, "SHOT_LIMITING_REDUCTION_10_20"},
-        {SHOT_LIMITING_REDUCTION_20_30, "SHOT_LIMITING_REDUCTION_20_30"},
-        {SHOT_LIMITING_REDUCTION_30_40, "SHOT_LIMITING_REDUCTION_30_40"},
-        {SHOT_LIMITING_REDUCTION_40_50, "SHOT_LIMITING_REDUCTION_40_50"},
-        {SHOT_LIMITING_REDUCTION_50_60, "SHOT_LIMITING_REDUCTION_50_60"},
-        {SHOT_LIMITING_REDUCTION_60_70, "SHOT_LIMITING_REDUCTION_60_70"},
-        {SHOT_LIMITING_REDUCTION_70_75, "SHOT_LIMITING_REDUCTION_70_75"},
-}};
+static constexpr Table<ShotLimitingStatus, const char *, 10>
+        shot_limiting_status_strings{{
+                {SHOT_LIMITING_NORMAL, "SHOT_LIMITING_NORMAL"},
+                {SHOT_LIMITING_IMMINENT, "SHOT_LIMITING_IMMINENT"},
+                {SHOT_LIMITING_REDUCTION_0_10, "SHOT_LIMITING_REDUCTION_0_10"},
+                {SHOT_LIMITING_REDUCTION_10_20,
+                 "SHOT_LIMITING_REDUCTION_10_20"},
+                {SHOT_LIMITING_REDUCTION_20_30,
+                 "SHOT_LIMITING_REDUCTION_20_30"},
+                {SHOT_LIMITING_REDUCTION_30_40,
+                 "SHOT_LIMITING_REDUCTION_30_40"},
+                {SHOT_LIMITING_REDUCTION_40_50,
+                 "SHOT_LIMITING_REDUCTION_40_50"},
+                {SHOT_LIMITING_REDUCTION_50_60,
+                 "SHOT_LIMITING_REDUCTION_50_60"},
+                {SHOT_LIMITING_REDUCTION_60_70,
+                 "SHOT_LIMITING_REDUCTION_60_70"},
+                {SHOT_LIMITING_REDUCTION_70_75,
+                 "SHOT_LIMITING_REDUCTION_70_75"},
+        }};
 
 // TODO: do we want these? do we like the names?
-Table<ThermalShutdownStatus, const char *, 2> thermal_shutdown_status_strings{{
-        {THERMAL_SHUTDOWN_NORMAL, "THERMAL_SHUTDOWN_NORMAL"},
-        {THERMAL_SHUTDOWN_IMMINENT, "THERMAL_SHUTDOWN_IMMINENT"},
-}};
-
-extern const std::vector<double> gen1_altitude_angles = {
-        16.611,  16.084,  15.557,  15.029,  14.502,  13.975,  13.447,  12.920,
-        12.393,  11.865,  11.338,  10.811,  10.283,  9.756,   9.229,   8.701,
-        8.174,   7.646,   7.119,   6.592,   6.064,   5.537,   5.010,   4.482,
-        3.955,   3.428,   2.900,   2.373,   1.846,   1.318,   0.791,   0.264,
-        -0.264,  -0.791,  -1.318,  -1.846,  -2.373,  -2.900,  -3.428,  -3.955,
-        -4.482,  -5.010,  -5.537,  -6.064,  -6.592,  -7.119,  -7.646,  -8.174,
-        -8.701,  -9.229,  -9.756,  -10.283, -10.811, -11.338, -11.865, -12.393,
-        -12.920, -13.447, -13.975, -14.502, -15.029, -15.557, -16.084, -16.611,
-};
-
-extern const std::vector<double> gen1_azimuth_angles = {
-        3.164, 1.055, -1.055, -3.164, 3.164, 1.055, -1.055, -3.164,
-        3.164, 1.055, -1.055, -3.164, 3.164, 1.055, -1.055, -3.164,
-        3.164, 1.055, -1.055, -3.164, 3.164, 1.055, -1.055, -3.164,
-        3.164, 1.055, -1.055, -3.164, 3.164, 1.055, -1.055, -3.164,
-        3.164, 1.055, -1.055, -3.164, 3.164, 1.055, -1.055, -3.164,
-        3.164, 1.055, -1.055, -3.164, 3.164, 1.055, -1.055, -3.164,
-        3.164, 1.055, -1.055, -3.164, 3.164, 1.055, -1.055, -3.164,
-        3.164, 1.055, -1.055, -3.164, 3.164, 1.055, -1.055, -3.164,
-};
-
-extern const mat4d default_imu_to_sensor_transform =
-        (mat4d() << 1, 0, 0, 6.253, 0, 1, 0, -11.775, 0, 0, 1, 7.645, 0, 0, 0,
-         1)
-                .finished();
-
-extern const mat4d default_lidar_to_sensor_transform =
-        (mat4d() << -1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1, 36.18, 0, 0, 0, 1)
-                .finished();
+static constexpr Table<ThermalShutdownStatus, const char *, 2>
+        thermal_shutdown_status_strings{{
+                {THERMAL_SHUTDOWN_NORMAL, "THERMAL_SHUTDOWN_NORMAL"},
+                {THERMAL_SHUTDOWN_IMMINENT, "THERMAL_SHUTDOWN_IMMINENT"},
+        }};
 
 // bool represents whether it is an object (true) or just a member (false)
 // NOTE: lidar_data_format and calibration_status should be objects but as they
 // were introduced earlier, non-legacy formats for FW version do not include
 // them
 // TODO parse metadata by FW version specified ?
-const std::map<std::string, bool> nonlegacy_metadata_fields = {
+static const std::map<std::string, bool> nonlegacy_metadata_fields = {
         {"sensor_info", true},        {"beam_intrinsics", true},
         {"imu_intrinsics", true},     {"lidar_intrinsics", true},
         {"config_params", true},      {"lidar_data_format", false},
@@ -739,7 +743,7 @@ inline uint32_t n_cols_of_lidar_mode(lidar_mode mode)
  *
  * @return lidar rotation frequency in Hz.
  */
-int frequency_of_lidar_mode(lidar_mode mode)
+inline int frequency_of_lidar_mode(lidar_mode mode)
 {
   switch (mode) {
     case MODE_4096x5:
@@ -1060,7 +1064,7 @@ std::string convert_to_legacy(const std::string &metadata);
  *
  * @return client version string
  */
-std::string client_version();
+inline std::string client_version() { return {"ouster_client_undefined"}; }
 
 /**
  * Get string representation of a channel field.

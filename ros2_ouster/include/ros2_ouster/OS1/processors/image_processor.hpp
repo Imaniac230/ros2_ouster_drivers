@@ -101,7 +101,7 @@ class ImageProcessor : public ros2_ouster::DataProcessorInterface
     _information_image.resize(_width * _height);
 
     _batch_and_publish = OS1::batch_to_iter<OSImageIt>(
-            _xyz_lut, _width, _height, {}, &image_os::ImageOS::make,
+            _xyz_lut, _width, _height, _pf, {}, &image_os::ImageOS::make,
             [&](uint64_t scan_ts) mutable {
               rclcpp::Time t(scan_ts);
               _range_image.header.stamp = t;

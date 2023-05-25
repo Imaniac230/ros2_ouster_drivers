@@ -38,10 +38,9 @@ namespace OS1
  * @param beam_altitude_angles altitude in degrees for each of H beams
  * @return xyz direction unit vectors for each point in the lidar scan
  */
-inline std::vector<double> make_xyz_lut(
-  int W, int H,
-  const std::vector<double> & azimuth_angles,
-  const std::vector<double> & altitude_angles)
+inline std::vector<double>
+make_xyz_lut(int W, int H, const std::vector<double> &azimuth_angles,
+             const std::vector<double> &altitude_angles)
 {
   const int n = W * H;
   std::vector<double> xyz = std::vector<double>(3 * n, 0);
@@ -50,13 +49,12 @@ inline std::vector<double> make_xyz_lut(
     double h_angle_0 = 2.0 * M_PI * icol / W;
     for (int ipx = 0; ipx < H; ipx++) {
       int ind = 3 * (icol * H + ipx);
-      double h_angle =
-        (azimuth_angles.at(ipx) * 2 * M_PI / 360.0) + h_angle_0;
+      double h_angle = (azimuth_angles.at(ipx) * 2 * M_PI / 360.0) + h_angle_0;
 
       xyz[ind + 0] = std::cos(altitude_angles[ipx] * 2 * M_PI / 360.0) *
-        std::cos(h_angle);
+                     std::cos(h_angle);
       xyz[ind + 1] = -std::cos(altitude_angles[ipx] * 2 * M_PI / 360.0) *
-        std::sin(h_angle);
+                     std::sin(h_angle);
       xyz[ind + 2] = std::sin(altitude_angles[ipx] * 2 * M_PI / 360.0);
     }
   }
@@ -72,13 +70,11 @@ inline std::vector<double> make_xyz_lut(
  */
 inline std::vector<int> get_px_offset(int lidar_mode)
 {
-  auto repeat = [](int n, const std::vector<int> & v) {
-      std::vector<int> res{};
-      for (int i = 0; i < n; i++) {
-        res.insert(res.end(), v.begin(), v.end());
-      }
-      return res;
-    };
+  auto repeat = [](int n, const std::vector<int> &v) {
+    std::vector<int> res{};
+    for (int i = 0; i < n; i++) { res.insert(res.end(), v.begin(), v.end()); }
+    return res;
+  };
 
   switch (lidar_mode) {
     case 512:
@@ -115,78 +111,74 @@ inline std::vector<int> get_px_offset(int lidar_mode)
  * which data is added for every point in the scan.
  */
 template<typename iterator_type, typename F, typename C>
-std::function<void(const uint8_t *, iterator_type it, uint64_t)> batch_to_iter(
-  const std::vector<double> & xyz_lut, int W, int H,
-  const typename iterator_type::value_type & empty, C && c, F && f)
+std::function<void(const uint8_t *, iterator_type it, uint64_t)>
+batch_to_iter(const std::vector<double> &xyz_lut, int W, int H,
+              const OS1::packet_format &pf,
+              const typename iterator_type::value_type &empty, C &&c, F &&f)
 {
   int next_m_id{W};
   int32_t cur_f_id{-1};
 
   int64_t scan_ts{-1L};
 
-  return [ = ](const uint8_t * packet_buf, iterator_type it,
-           uint64_t override_ts) mutable {
-           for (int icol = 0; icol < columns_per_buffer; icol++) {
-             const uint8_t * col_buf = nth_col(icol, packet_buf);
-             const uint16_t m_id = col_measurement_id(col_buf);
-             const uint16_t f_id = col_frame_id(col_buf);
-             const uint64_t ts = col_timestamp(col_buf);
-             const bool valid = col_valid(col_buf) == 0xffffffff;
+  return [=](const uint8_t *packet_buf, iterator_type it,
+             uint64_t override_ts) mutable {
+    for (int icol = 0; icol < pf.columns_per_packet; icol++) {
+      const uint8_t *col_buf = pf.nth_col(icol, packet_buf);
+      const uint16_t m_id = pf.col_measurement_id(col_buf);
+      const uint16_t f_id = pf.col_frame_id(col_buf);
+      const uint64_t ts = pf.col_timestamp(col_buf);
+      const bool valid = (pf.col_status(col_buf) & 0x01);
 
-             // drop invalid / out-of-bounds data in case of misconfiguration
-             if (!valid || m_id >= W || f_id + 1 == cur_f_id) {
-               continue;
-             }
+      // drop invalid / out-of-bounds data in case of misconfiguration
+      if (!valid || m_id >= W || f_id + 1 == cur_f_id) { continue; }
 
-             if (f_id != cur_f_id) {
-               // if not initializing with first packet
-               if (scan_ts != -1) {
-                 // zero out remaining missing columns
-                 std::fill(it + (H * next_m_id), it + (H * W), empty);
-                 f(override_ts == 0 ? scan_ts : override_ts);
-               }
+      if (f_id != cur_f_id) {
+        // if not initializing with first packet
+        if (scan_ts != -1) {
+          // zero out remaining missing columns
+          std::fill(it + (H * next_m_id), it + (H * W), empty);
+          f(override_ts == 0 ? scan_ts : override_ts);
+        }
 
-               // start new frame
-               scan_ts = ts;
-               next_m_id = 0;
-               cur_f_id = f_id;
-             }
+        // start new frame
+        scan_ts = ts;
+        next_m_id = 0;
+        cur_f_id = f_id;
+      }
 
-             // zero out missing columns if we jumped forward
-             if (m_id >= next_m_id) {
-               std::fill(it + (H * next_m_id), it + (H * m_id), empty);
-               next_m_id = m_id + 1;
-             }
+      // zero out missing columns if we jumped forward
+      if (m_id >= next_m_id) {
+        std::fill(it + (H * next_m_id), it + (H * m_id), empty);
+        next_m_id = m_id + 1;
+      }
 
-             // index of the first point in current packet
-             const int idx = H * m_id;
+      // index of the first point in current packet
+      const int idx = H * m_id;
 
-             for (uint8_t ipx = 0; ipx < H; ipx++) {
-               const uint8_t * px_buf = nth_px(ipx, col_buf);
-               uint32_t r = px_range(px_buf);
-               int ind = 3 * (idx + ipx);
+      for (uint8_t ipx = 0; ipx < H; ipx++) {
+        const uint8_t *px_buf = pf.nth_px(ipx, col_buf);
+        uint32_t r = pf.px_range(px_buf);
+        int ind = 3 * (idx + ipx);
 
-               // x, y, z(m), intensity, ts, reflectivity, ring, column,
-               // noise, range (mm)
-               it[idx + ipx] = c(
-                 r * 0.001f * xyz_lut[ind + 0],
-                 r * 0.001f * xyz_lut[ind + 1],
-                 r * 0.001f * xyz_lut[ind + 2],
-                 px_signal(px_buf), ts - scan_ts,
-                 px_reflectivity(px_buf), ipx, m_id,
-                 px_noise_photons(px_buf), r);
-             }
-           }
-         };
+        // x, y, z(m), intensity, ts, reflectivity, ring, column,
+        // noise, range (mm)
+        it[idx + ipx] =
+                c(r * 0.001f * xyz_lut[ind + 0], r * 0.001f * xyz_lut[ind + 1],
+                  r * 0.001f * xyz_lut[ind + 2], pf.px_signal(px_buf),
+                  ts - scan_ts, pf.px_reflectivity(px_buf), ipx, m_id,
+                  pf.px_ambient(px_buf), r);
+      }
+    }
+  };
 }
 
-    struct version
-    {
-        uint16_t major;  ///< Major version number
-        uint16_t minor;  ///< Minor version number
-        uint16_t patch;  ///< Patch(or revision) version number
-    };
-    const version invalid_version = {0, 0, 0};
+struct version {
+  uint16_t major;///< Major version number
+  uint16_t minor;///< Minor version number
+  uint16_t patch;///< Patch(or revision) version number
+};
+const version invalid_version = {0, 0, 0};
 
 /** \defgroup ouster_client_version_operators Ouster Client version.h Operators
  * @{
@@ -199,9 +191,10 @@ std::function<void(const uint8_t *, iterator_type it, uint64_t)> batch_to_iter(
  *
  * @return If the versions are the same.
  */
-    inline bool operator==(const version& u, const version& v) {
-        return u.major == v.major && u.minor == v.minor && u.patch == v.patch;
-    }
+inline bool operator==(const version &u, const version &v)
+{
+  return u.major == v.major && u.minor == v.minor && u.patch == v.patch;
+}
 
 /**
  * Less than operation for version structs.
@@ -211,10 +204,11 @@ std::function<void(const uint8_t *, iterator_type it, uint64_t)> batch_to_iter(
  *
  * @return If the first version is less than the second version.
  */
-    inline bool operator<(const version& u, const version& v) {
-        return (u.major < v.major) || (u.major == v.major && u.minor < v.minor) ||
-               (u.major == v.major && u.minor == v.minor && u.patch < v.patch);
-    }
+inline bool operator<(const version &u, const version &v)
+{
+  return (u.major < v.major) || (u.major == v.major && u.minor < v.minor) ||
+         (u.major == v.major && u.minor == v.minor && u.patch < v.patch);
+}
 
 /**
  * Less than or equal to operation for version structs.
@@ -224,9 +218,10 @@ std::function<void(const uint8_t *, iterator_type it, uint64_t)> batch_to_iter(
  *
  * @return If the first version is less than or equal to the second version.
  */
-    inline bool operator<=(const version& u, const version& v) {
-        return u < v || u == v;
-    }
+inline bool operator<=(const version &u, const version &v)
+{
+  return u < v || u == v;
+}
 
 /**
  * In-equality operation for version structs.
@@ -236,7 +231,7 @@ std::function<void(const uint8_t *, iterator_type it, uint64_t)> batch_to_iter(
  *
  * @return If the versions are not the same.
  */
-    inline bool operator!=(const version& u, const version& v) { return !(u == v); }
+inline bool operator!=(const version &u, const version &v) { return !(u == v); }
 
 /**
  * Greater than or equal to operation for version structs.
@@ -246,7 +241,7 @@ std::function<void(const uint8_t *, iterator_type it, uint64_t)> batch_to_iter(
  *
  * @return If the first version is greater than or equal to the second version.
  */
-    inline bool operator>=(const version& u, const version& v) { return !(u < v); }
+inline bool operator>=(const version &u, const version &v) { return !(u < v); }
 
 /**
  * Greater than operation for version structs.
@@ -256,7 +251,7 @@ std::function<void(const uint8_t *, iterator_type it, uint64_t)> batch_to_iter(
  *
  * @return If the first version is greater than the second version.
  */
-    inline bool operator>(const version& u, const version& v) { return !(u <= v); }
+inline bool operator>(const version &u, const version &v) { return !(u <= v); }
 /** @}*/
 
 /**
@@ -266,16 +261,14 @@ std::function<void(const uint8_t *, iterator_type it, uint64_t)> batch_to_iter(
  *
  * @return string representation of the version.
  */
-    std::string to_string(const version& v)
-    {
-        if (v == invalid_version) {
-            return "UNKNOWN";
-        }
+inline std::string to_string(const version &v)
+{
+  if (v == invalid_version) { return "UNKNOWN"; }
 
-        std::stringstream ss{};
-        ss << "v" << v.major << "." << v.minor << "." << v.patch;
-        return ss.str();
-    }
+  std::stringstream ss{};
+  ss << "v" << v.major << "." << v.minor << "." << v.patch;
+  return ss.str();
+}
 
 /**
  * Get version from string.
@@ -284,20 +277,19 @@ std::function<void(const uint8_t *, iterator_type it, uint64_t)> batch_to_iter(
  *
  * @return version corresponding to the string, or invalid_version on error.
  */
-    version version_of_string(const std::string& s)
-    {
-        std::istringstream is{s};
-        char c1, c2, c3;
-        version v{};
+inline version version_of_string(const std::string &s)
+{
+  std::istringstream is{s};
+  char c1, c2, c3;
+  version v{};
 
-        is >> c1 >> v.major >> c2 >> v.minor >> c3 >> v.patch;
+  is >> c1 >> v.major >> c2 >> v.minor >> c3 >> v.patch;
 
-        if (is && c1 == 'v' && c2 == '.' && c3 == '.')
-            return v;
-        else
-            return invalid_version;
-    }
+  if (is && c1 == 'v' && c2 == '.' && c3 == '.') return v;
+  else
+    return invalid_version;
+}
 
-}  // namespace OS1
+}// namespace OS1
 
-#endif  // ROS2_OUSTER__OS1__OS1_UTIL_HPP_
+#endif// ROS2_OUSTER__OS1__OS1_UTIL_HPP_

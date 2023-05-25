@@ -39,7 +39,6 @@
 
 #include "ros2_ouster/OS1/OS1_base_factory.hpp"
 #include "ros2_ouster/OS1/OS1_base_interface.hpp"
-#include "ros2_ouster/OS1/OS1_types.hpp"
 #include "ros2_ouster/OS1/OS1_util.hpp"
 #include "ros2_ouster/interfaces/common.hpp"
 #include "json/json.h"
@@ -99,8 +98,8 @@ enum config_flags : uint8_t
  *
  * @return true if config params successfuly set on sensor.
  */
-bool set_config(const std::string &hostname, const sensor_config &config,
-                uint8_t config_flags = 0)
+inline bool set_config(const std::string &hostname, const sensor_config &config,
+                       uint8_t config_flags = 0)
 {
   auto sensor_http = BaseInterface::create(hostname);
 

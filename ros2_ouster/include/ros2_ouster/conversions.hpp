@@ -107,6 +107,7 @@ toMsg(const OS1::mat4d &mat, const std::string &frame,
  * @brief Convert IMU to message format
  */
 inline sensor_msgs::msg::Imu toMsg(const uint8_t *buf, const std::string &frame,
+                                   const OS1::packet_format &pf,
                                    uint64_t override_ts = 0)
 {
   const double standard_g = 9.80665;
@@ -116,17 +117,17 @@ inline sensor_msgs::msg::Imu toMsg(const uint8_t *buf, const std::string &frame,
   m.orientation.z = 0;
   m.orientation.w = 1;
 
-  m.header.stamp = override_ts == 0 ? rclcpp::Time(OS1::imu_gyro_ts(buf))
+  m.header.stamp = override_ts == 0 ? rclcpp::Time(pf.imu_gyro_ts(buf))
                                     : rclcpp::Time(override_ts);
   m.header.frame_id = frame;
 
-  m.linear_acceleration.x = OS1::imu_la_x(buf) * standard_g;
-  m.linear_acceleration.y = OS1::imu_la_y(buf) * standard_g;
-  m.linear_acceleration.z = OS1::imu_la_z(buf) * standard_g;
+  m.linear_acceleration.x = pf.imu_la_x(buf) * standard_g;
+  m.linear_acceleration.y = pf.imu_la_y(buf) * standard_g;
+  m.linear_acceleration.z = pf.imu_la_z(buf) * standard_g;
 
-  m.angular_velocity.x = OS1::imu_av_x(buf) * M_PI / 180.0;
-  m.angular_velocity.y = OS1::imu_av_y(buf) * M_PI / 180.0;
-  m.angular_velocity.z = OS1::imu_av_z(buf) * M_PI / 180.0;
+  m.angular_velocity.x = pf.imu_av_x(buf) * M_PI / 180.0;
+  m.angular_velocity.y = pf.imu_av_y(buf) * M_PI / 180.0;
+  m.angular_velocity.z = pf.imu_av_z(buf) * M_PI / 180.0;
 
   for (int i = 0; i < 9; i++) {
     m.orientation_covariance[i] = -1;
@@ -241,7 +242,7 @@ toMsg(const std::vector<scan_os::ScanOS> &scans,
       resolution = 2048.0;
       rate = 10.0;
       break;
-    case OS1::MODE_4096x5:
+    case OS1::lidar_mode::MODE_4096x5:
       resolution = 4096.0;
       rate = 5.0;
       break;
@@ -256,7 +257,7 @@ toMsg(const std::vector<scan_os::ScanOS> &scans,
   msg.time_increment = 1.0f / rate / resolution;
   msg.angle_increment = 2.0f * M_PIf32 / resolution;
 
-  for (auto scan : scans) {
+  for (auto scan: scans) {
     if (scan.ring == ring_to_use) {
       msg.ranges.push_back(static_cast<float>(scan.range * 5e-3));
       msg.intensities.push_back(std::min(scan.intensity, 255.0f));

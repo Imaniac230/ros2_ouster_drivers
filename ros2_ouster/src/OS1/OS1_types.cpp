@@ -8,7 +8,6 @@
 #include <json/json.h>
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <fstream>
 #include <iostream>

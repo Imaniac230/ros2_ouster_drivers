@@ -17,6 +17,8 @@ find_package(ouster_msgs REQUIRED)
 find_package(PCL REQUIRED COMPONENTS common)
 
 find_package(jsoncpp REQUIRED)
+find_package(CURL REQUIRED)
+find_package(Eigen3 REQUIRED)
 
 set(CMAKE_CXX_STANDARD 17)
 
@@ -59,6 +61,8 @@ ament_target_dependencies(${library_name}
 target_link_libraries(${library_name}
   jsoncpp_lib
   ${PCL_LIBRARIES}
+  CURL::libcurl
+  Eigen3::Eigen
 )
 
 add_executable(${executable_name}

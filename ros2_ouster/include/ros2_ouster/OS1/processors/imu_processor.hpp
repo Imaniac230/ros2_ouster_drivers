@@ -64,7 +64,7 @@ class IMUProcessor : public ros2_ouster::DataProcessorInterface
   bool process(uint8_t *data, uint64_t override_ts) override
   {
     if (_pub->get_subscription_count() > 0 && _pub->is_activated()) {
-      _pub->publish(ros2_ouster::toMsg(data, _frame, override_ts));
+      _pub->publish(ros2_ouster::toMsg(data, _frame, _pf, override_ts));
     }
     return true;
   }
