@@ -86,26 +86,18 @@ ros2_ouster::State OS1Sensor::poll()
 
 uint8_t *OS1Sensor::readPacket()
 {
-  switch (_state) {
-    case client_state::LIDAR_DATA:
-      if (read_lidar_packet(*_ouster_client, _lidar_packet.data(),
-                            *_packet_format)) {
-        return _lidar_packet.data();
-      }
-      else {
-        return nullptr;
-      }
-    case client_state::IMU_DATA:
-      if (read_imu_packet(*_ouster_client, _imu_packet.data(),
-                          *_packet_format)) {
-        return _imu_packet.data();
-      }
-      else {
-        return nullptr;
-      }
-    default:
-      return nullptr;
+  if ((_state & client_state::LIDAR_DATA) &&
+      read_lidar_packet(*_ouster_client, _lidar_packet.data(),
+                        *_packet_format)) {
+    std::cout << "got lidar packet size: " << _lidar_packet.size() << std::endl;
+    return _lidar_packet.data();
   }
+  if ((_state & client_state::IMU_DATA) &&
+      read_imu_packet(*_ouster_client, _imu_packet.data(), *_packet_format)) {
+    return _imu_packet.data();
+  }
+
+  return nullptr;
 }
 
 void OS1Sensor::updateConfigAndMetadata()
@@ -173,7 +165,8 @@ void OS1Sensor::populate_metadata_defaults(sensor_info &info,
   if (info.prod_line.empty()) info.prod_line = "UNKNOWN";
 
   if (info.beam_azimuth_angles.empty() || info.beam_altitude_angles.empty()) {
-    std::cerr << "Beam angles not found in metadata; using design values" << std::endl;
+    std::cerr << "Beam angles not found in metadata; using design values"
+              << std::endl;
     info.beam_azimuth_angles = OS1::gen1_azimuth_angles;
     info.beam_altitude_angles = OS1::gen1_altitude_angles;
   }

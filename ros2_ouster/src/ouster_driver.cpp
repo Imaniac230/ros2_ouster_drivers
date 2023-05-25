@@ -47,6 +47,7 @@ OusterDriver::OusterDriver(
   this->declare_parameter("sensor_frame", std::string("laser_sensor_frame"));
   this->declare_parameter("laser_frame", std::string("laser_data_frame"));
   this->declare_parameter("imu_frame", std::string("imu_data_frame"));
+  this->declare_parameter("udp_profile_lidar", "");
   this->declare_parameter("use_system_default_qos", false);
   this->declare_parameter("os1_proc_mask", std::string("IMG|PCL|IMU|SCAN"));
 }
