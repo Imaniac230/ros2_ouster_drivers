@@ -33,6 +33,11 @@ OS1Sensor::~OS1Sensor()
 void OS1Sensor::reset(const ros2_ouster::Configuration &config)
 {
   _ouster_client.reset();
+
+  //TODO(force-reinit): currently always forcing reinit, rethink this later?
+  force_sensor_reinit = true;
+  reset_last_init_id = true;
+
   configure(config);
 }
 
@@ -50,16 +55,66 @@ void OS1Sensor::configure(const ros2_ouster::Configuration &config)
     exit(-1);
   }
 
-  _ouster_client =
-          OS1::init_client(config.lidar_ip, config.computer_ip,
-                           OS1::lidar_mode_of_string(config.lidar_mode),
-                           OS1::timestamp_mode_of_string(config.timestamp_mode),
-                           config.lidar_port, config.imu_port);
+  if (!OS1::udp_profile_lidar_of_string(config.lidar_udp_profile)) {
+    throw ros2_ouster::OusterDriverException(std::string(
+            "Invalid lidar udp profile %s!", config.lidar_udp_profile.c_str()));
+    exit(-1);
+  }
+
+  _ouster_client = configure_and_initialize_sensor(config);
 
   if (!_ouster_client) {
     throw ros2_ouster::OusterDriverException(
             std::string("Failed to create connection to lidar."));
   }
+}
+
+std::shared_ptr<client> OS1Sensor::configure_and_initialize_sensor(
+        const ros2_ouster::Configuration &config)
+{
+  sensor_config sensor_config{};
+  sensor_config.udp_dest = config.computer_ip;
+  sensor_config.udp_port_imu = config.imu_port;
+  sensor_config.udp_port_lidar = config.lidar_port;
+  sensor_config.ld_mode = OS1::lidar_mode_of_string(config.lidar_mode);
+  sensor_config.ts_mode = OS1::timestamp_mode_of_string(config.timestamp_mode);
+  sensor_config.udp_profile_lidar =
+          OS1::udp_profile_lidar_of_string(config.lidar_udp_profile);
+
+  uint8_t config_flags = compose_config_flags(sensor_config);
+  if (!set_config(config.lidar_ip, sensor_config, config_flags)) {
+    throw std::runtime_error("Error connecting to sensor " + config.lidar_ip);
+  }
+
+  std::cout << "Sensor " << config.lidar_ip
+            << " configured successfully, initializing client" << std::endl;
+
+  return OS1::init_client(config.lidar_ip, sensor_config.udp_dest.value(),
+                          sensor_config.ld_mode.value(),
+                          sensor_config.ts_mode.value(),
+                          sensor_config.udp_port_lidar.value(),
+                          sensor_config.udp_port_imu.value());
+}
+
+uint8_t OS1Sensor::compose_config_flags(const sensor_config &config)
+{
+  uint8_t config_flags = 0;
+  if (config.udp_dest) {
+    std::cout << "Will send UDP data to " << config.udp_dest.value()
+              << std::endl;
+  }
+  else {
+    std::cout << "Will use automatic UDP destination" << std::endl;
+    config_flags |= OS1::CONFIG_UDP_DEST_AUTO;
+  }
+
+  if (force_sensor_reinit) {
+    force_sensor_reinit = false;
+    std::cout << "Forcing sensor to reinitialize" << std::endl;
+    config_flags |= OS1::CONFIG_FORCE_REINIT;
+  }
+
+  return config_flags;
 }
 
 void OS1Sensor::allocateBuffers()
@@ -89,7 +144,6 @@ uint8_t *OS1Sensor::readPacket()
   if ((_state & client_state::LIDAR_DATA) &&
       read_lidar_packet(*_ouster_client, _lidar_packet.data(),
                         *_packet_format)) {
-    std::cout << "got lidar packet size: " << _lidar_packet.size() << std::endl;
     return _lidar_packet.data();
   }
   if ((_state & client_state::IMU_DATA) &&

@@ -58,8 +58,7 @@ class PointcloudProcessor : public ros2_ouster::DataProcessorInterface
     _width = OS1::n_cols_of_lidar_mode(_info.mode);
     _xyz_lut = OS1::make_xyz_lut(_width, _height, _info.beam_azimuth_angles,
                                  _info.beam_altitude_angles);
-    _cloud = std::make_shared<pcl::PointCloud<point_os::PointOS>>(_width,
-                                                                  _height);
+    _cloud = std::make_shared<OSCloud>(_width, _height);
     _pub = _node->create_publisher<sensor_msgs::msg::PointCloud2>("points",
                                                                   qos);
 
@@ -74,6 +73,9 @@ class PointcloudProcessor : public ros2_ouster::DataProcessorInterface
                 _pub->publish(std::move(msg_ptr));
               }
             });
+
+    std::cout << "created processor -> h: " << _height << ", w: " << _width
+              << ", xyz_lut: " << _xyz_lut.size() << std::endl;
   }
 
   /**

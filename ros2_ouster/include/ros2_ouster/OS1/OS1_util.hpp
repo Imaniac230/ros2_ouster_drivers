@@ -126,7 +126,7 @@ batch_to_iter(const std::vector<double> &xyz_lut, int W, int H,
     for (int icol = 0; icol < pf.columns_per_packet; icol++) {
       const uint8_t *col_buf = pf.nth_col(icol, packet_buf);
       const uint16_t m_id = pf.col_measurement_id(col_buf);
-      const uint16_t f_id = pf.col_frame_id(col_buf);
+      const uint16_t f_id = pf.frame_id(col_buf);
       const uint64_t ts = pf.col_timestamp(col_buf);
       const bool valid = (pf.col_status(col_buf) & 0x01);
 

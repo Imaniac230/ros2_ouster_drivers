@@ -47,7 +47,7 @@ OusterDriver::OusterDriver(
   this->declare_parameter("sensor_frame", std::string("laser_sensor_frame"));
   this->declare_parameter("laser_frame", std::string("laser_data_frame"));
   this->declare_parameter("imu_frame", std::string("imu_data_frame"));
-  this->declare_parameter("udp_profile_lidar", "");
+  this->declare_parameter("lidar_udp_profile", std::string("RNG19_RFL8_SIG16_NIR16"));
   this->declare_parameter("use_system_default_qos", false);
   this->declare_parameter("os1_proc_mask", std::string("IMG|PCL|IMU|SCAN"));
 }
@@ -81,6 +81,7 @@ void OusterDriver::onConfigure()
   } else {
     _use_ros_time = false;
   }
+  lidar_config.lidar_udp_profile = get_parameter("lidar_udp_profile").as_string();
 
   _laser_sensor_frame = get_parameter("sensor_frame").as_string();
   _laser_data_frame = get_parameter("laser_frame").as_string();
@@ -211,7 +212,7 @@ void OusterDriver::processData()
       return;
     }
 
-    uint8_t * packet_data = handlePacket(state);
+    uint8_t * packet_data = handlePacket();
 
     if (packet_data) {
       std::pair<DataProcessorMapIt, DataProcessorMapIt> key_its;
@@ -245,7 +246,7 @@ void OusterDriver::handlePollError() {
   }
 }
 
-uint8_t * OusterDriver::handlePacket(const ros2_ouster::State state) {
+uint8_t * OusterDriver::handlePacket() {
   uint8_t * packet_data = _sensor->readPacket();
 
   if (!packet_data) {
@@ -290,6 +291,7 @@ void OusterDriver::resetService(
   lidar_config.lidar_port = get_parameter("lidar_port").as_int();
   lidar_config.lidar_mode = get_parameter("lidar_mode").as_string();
   lidar_config.timestamp_mode = get_parameter("timestamp_mode").as_string();
+  lidar_config.lidar_udp_profile = get_parameter("lidar_udp_profile").as_string();
   _sensor->reset(lidar_config);
 }
 

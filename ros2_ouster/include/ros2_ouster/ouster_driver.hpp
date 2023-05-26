@@ -14,19 +14,19 @@
 #ifndef ROS2_OUSTER__OUSTER_DRIVER_HPP_
 #define ROS2_OUSTER__OUSTER_DRIVER_HPP_
 
-#include <memory>
 #include <map>
+#include <memory>
 #include <string>
 
 #include "ros2_ouster/conversions.hpp"
 
 #include "ros2_ouster/interfaces/lifecycle_interface.hpp"
 
-#include "sensor_msgs/msg/image.hpp"
-#include "sensor_msgs/msg/point_cloud2.hpp"
-#include "sensor_msgs/msg/imu.hpp"
-#include "std_srvs/srv/empty.hpp"
 #include "ouster_msgs/srv/get_metadata.hpp"
+#include "sensor_msgs/msg/image.hpp"
+#include "sensor_msgs/msg/imu.hpp"
+#include "sensor_msgs/msg/point_cloud2.hpp"
+#include "std_srvs/srv/empty.hpp"
 
 #include "tf2_ros/static_transform_broadcaster.h"
 
@@ -45,7 +45,7 @@ class SensorInterface;
  */
 class OusterDriver : public lifecycle_interface::LifecycleInterface
 {
-public:
+  public:
   using DataProcessorMap = std::multimap<State, DataProcessorInterface *>;
   using DataProcessorMapIt = DataProcessorMap::iterator;
 
@@ -53,9 +53,8 @@ public:
    * @brief A constructor for ros2_ouster::OusterDriver
    * @param options Node options for lifecycle node interfaces
    */
-  OusterDriver(
-    std::unique_ptr<SensorInterface> sensor,
-    const rclcpp::NodeOptions & options);
+  OusterDriver(std::unique_ptr<SensorInterface> sensor,
+               const rclcpp::NodeOptions &options);
 
   /**
    * @brief A destructor for ros2_ouster::OusterDriver
@@ -98,7 +97,7 @@ public:
    */
   void onCleanup() override;
 
-private:
+  private:
   /**
   * @brief Timer callback to process the UDP socket
   */
@@ -107,12 +106,12 @@ private:
   /**
    * @brief Create TF2 frames for the lidar sensor
    */
-   //TODO(tf): abstract this away so that it's not dependent on the OS1 struct ?
-  void broadcastStaticTransforms(const OS1::sensor_info & info_data);
+  //TODO(tf): abstract this away so that it's not dependent on the OS1 struct ?
+  void broadcastStaticTransforms(const OS1::sensor_info &info_data);
 
   void handlePollError();
 
-  uint8_t * handlePacket(ros2_ouster::State state);
+  uint8_t *handlePacket();
 
   /**
   * @brief service callback to reset the lidar
@@ -120,10 +119,10 @@ private:
   * @param request Shared ptr of the Empty request
   * @param response Shared ptr of the Empty response
   */
-  void resetService(
-    const std::shared_ptr<rmw_request_id_t>/*request_header*/,
-    const std::shared_ptr<std_srvs::srv::Empty::Request> request,
-    std::shared_ptr<std_srvs::srv::Empty::Response> response);
+  void
+  resetService(const std::shared_ptr<rmw_request_id_t> /*request_header*/,
+               const std::shared_ptr<std_srvs::srv::Empty::Request> request,
+               std::shared_ptr<std_srvs::srv::Empty::Response> response);
 
   /**
   * @brief service callback to get metadata from lidar
@@ -132,9 +131,9 @@ private:
   * @param response Shared ptr of the GetMetadata response
   */
   void getMetadata(
-    const std::shared_ptr<rmw_request_id_t>/*request_header*/,
-    const std::shared_ptr<ouster_msgs::srv::GetMetadata::Request> request,
-    std::shared_ptr<ouster_msgs::srv::GetMetadata::Response> response);
+          const std::shared_ptr<rmw_request_id_t> /*request_header*/,
+          const std::shared_ptr<ouster_msgs::srv::GetMetadata::Request> request,
+          std::shared_ptr<ouster_msgs::srv::GetMetadata::Response> response);
 
   rclcpp::Service<std_srvs::srv::Empty>::SharedPtr _reset_srv;
   rclcpp::Service<ouster_msgs::srv::GetMetadata>::SharedPtr _metadata_srv;
@@ -146,10 +145,10 @@ private:
   std::string _laser_sensor_frame, _laser_data_frame, _imu_data_frame;
   std::unique_ptr<tf2_ros::StaticTransformBroadcaster> _tf_b;
 
-  bool _use_system_default_qos;
-  bool _use_ros_time;
+  bool _use_system_default_qos{};
+  bool _use_ros_time{};
 
-  std::uint32_t _os1_proc_mask;
+  std::uint32_t _os1_proc_mask{};
 
   int _poll_error_count = 0;
   static constexpr int _max_poll_error_count = 10;
@@ -157,6 +156,6 @@ private:
   static constexpr int _max_packet_error_count = 60;
 };
 
-}  // namespace ros2_ouster
+}// namespace ros2_ouster
 
-#endif  // ROS2_OUSTER__OUSTER_DRIVER_HPP_
+#endif// ROS2_OUSTER__OUSTER_DRIVER_HPP_

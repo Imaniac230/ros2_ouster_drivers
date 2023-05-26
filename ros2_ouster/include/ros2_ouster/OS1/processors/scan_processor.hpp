@@ -115,7 +115,6 @@ class ScanProcessor : public ros2_ouster::DataProcessorInterface
   rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::LaserScan>::SharedPtr
           _pub;
   std::function<void(const uint8_t *, OSScanIt, uint64_t)> _batch_and_publish;
-  std::shared_ptr<pcl::PointCloud<scan_os::ScanOS>> _cloud;
   rclcpp_lifecycle::LifecycleNode::SharedPtr _node;
   std::vector<double> _xyz_lut;
   OSScan _aggregated_scans;

@@ -113,6 +113,11 @@ class OS1Sensor : public ros2_ouster::SensorInterface
   }
 
   private:
+  [[nodiscard]] std::shared_ptr<client>
+  configure_and_initialize_sensor(const ros2_ouster::Configuration &config);
+
+  uint8_t compose_config_flags(const sensor_config &config);
+
   inline bool init_id_changed(const packet_format &pf, const uint8_t *lidar_buf)
   {
     uint32_t current_init_id = pf.init_id(lidar_buf);

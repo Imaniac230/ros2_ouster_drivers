@@ -29,6 +29,7 @@ struct Configuration
   int lidar_port;
   std::string lidar_mode;
   std::string timestamp_mode;
+  std::string lidar_udp_profile;
 };
 
 /**
