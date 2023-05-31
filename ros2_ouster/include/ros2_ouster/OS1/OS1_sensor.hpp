@@ -27,7 +27,7 @@
 namespace OS1
 {
 
-inline ros2_ouster::State as_ouster_state(const client_state &right)
+inline ros2_ouster::State as_ouster_state(const client_state & right)
 {
   switch (right) {
     case client_state::TIMEOUT:
@@ -56,13 +56,13 @@ class OS1Sensor : public ros2_ouster::SensorInterface
    * @brief Reset lidar sensor
    * @param configuration file to use
    */
-  void reset(const ros2_ouster::Configuration &config) override;
+  void reset(const ros2_ouster::Configuration & config) override;
 
   /**
    * @brief Configure lidar sensor
    * @param configuration file to use
    */
-  void configure(const ros2_ouster::Configuration &config) override;
+  void configure(const ros2_ouster::Configuration & config) override;
 
   /**
    * @brief Allocate sensor data buffers based on the active configuration
@@ -78,12 +78,12 @@ class OS1Sensor : public ros2_ouster::SensorInterface
    * @brief Get lidar sensor's metadata
    * @return sensor metadata struct
    */
-  [[nodiscard]] inline const std::string &getMetadata() const override
+  [[nodiscard]] inline const std::string & getMetadata() const override
   {
     return _metadata;
   }
 
-  [[nodiscard]] inline const OS1::sensor_info &getSensorInfo() const override
+  [[nodiscard]] inline const OS1::sensor_info & getSensorInfo() const override
   {
     return _info;
   }
@@ -99,13 +99,13 @@ class OS1Sensor : public ros2_ouster::SensorInterface
    * @param state of the sensor
    * @return the packet of data
    */
-  uint8_t *readPacket() override;
+  uint8_t * readPacket() override;
 
   /**
    * @brief Indicate whether a reactivation operation is required
    * @return sensor metadata struct
    */
-  inline bool shouldReset(const uint8_t *packet) override
+  inline bool shouldReset(const uint8_t * packet) override
   {
     return (_state == client_state::LIDAR_DATA) &&
            is_non_legacy_lidar_profile(_info) &&
@@ -114,11 +114,12 @@ class OS1Sensor : public ros2_ouster::SensorInterface
 
   private:
   [[nodiscard]] std::shared_ptr<client>
-  configure_and_initialize_sensor(const ros2_ouster::Configuration &config);
+  configure_and_initialize_sensor(const ros2_ouster::Configuration & config);
 
-  uint8_t compose_config_flags(const sensor_config &config);
+  uint8_t compose_config_flags(const sensor_config & config);
 
-  inline bool init_id_changed(const packet_format &pf, const uint8_t *lidar_buf)
+  inline bool init_id_changed(const packet_format & pf,
+                              const uint8_t * lidar_buf)
   {
     uint32_t current_init_id = pf.init_id(lidar_buf);
     if (!last_init_id_initialized) {
@@ -135,13 +136,13 @@ class OS1Sensor : public ros2_ouster::SensorInterface
     return true;
   }
 
-  inline static bool is_non_legacy_lidar_profile(const sensor_info &info)
+  inline static bool is_non_legacy_lidar_profile(const sensor_info & info)
   {
     return info.format.udp_profile_lidar !=
            UDPProfileLidar::PROFILE_LIDAR_LEGACY;
   }
 
-  static void populate_metadata_defaults(sensor_info &info,
+  static void populate_metadata_defaults(sensor_info & info,
                                          lidar_mode specified_lidar_mode);
 
   std::shared_ptr<client> _ouster_client;

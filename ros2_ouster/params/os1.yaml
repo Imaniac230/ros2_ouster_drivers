@@ -2,7 +2,7 @@ ouster_driver:
   ros__parameters:
     lidar_ip: 10.0.21.219
     computer_ip: 10.0.21.220
-    lidar_mode: "1024x20"
+    lidar_mode: "512x10" # columns x frequency, 512x10, 512x20, 1024x10, 1024x20, 2048x10, 4096x5
     imu_port: 7503
     lidar_port: 7502
     sensor_frame: laser_sensor_frame

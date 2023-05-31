@@ -18,48 +18,14 @@
 #include <algorithm>
 #include <functional>
 #include <iterator>
+#include <optional>
 #include <vector>
 
+#include "ros2_ouster/OS1/OS1_lidar_scan.hpp"
 #include <ros2_ouster/OS1/OS1_types.hpp>
 
 namespace OS1
 {
-/**
- * Generate a matrix of unit vectors pointing radially outwards, useful for
- * efficiently computing cartesian coordinates from ranges.  The result is a n x
- * 3 array of doubles stored in row-major order where each row is the unit
- * vector corresponding to the nth point in a lidar scan, with 0 <= n < H*W. The
- * index into the lidar scan of a point can be obtained by H * j + i (where i is
- * the index to nth_px, and j is the measurement_id of the column, when reading
- * from a packet).
- * @param W number of columns in the lidar scan. One of 512, 1024, or 2048.
- * @param H number of rows in the lidar scan. 64 for the OS1 family of sensors.
- * @param beam_azimuth_angles azimuth offsets in degrees for each of H beams
- * @param beam_altitude_angles altitude in degrees for each of H beams
- * @return xyz direction unit vectors for each point in the lidar scan
- */
-inline std::vector<double>
-make_xyz_lut(int W, int H, const std::vector<double> &azimuth_angles,
-             const std::vector<double> &altitude_angles)
-{
-  const int n = W * H;
-  std::vector<double> xyz = std::vector<double>(3 * n, 0);
-
-  for (int icol = 0; icol < W; icol++) {
-    double h_angle_0 = 2.0 * M_PI * icol / W;
-    for (int ipx = 0; ipx < H; ipx++) {
-      int ind = 3 * (icol * H + ipx);
-      double h_angle = (azimuth_angles.at(ipx) * 2 * M_PI / 360.0) + h_angle_0;
-
-      xyz[ind + 0] = std::cos(altitude_angles[ipx] * 2 * M_PI / 360.0) *
-                     std::cos(h_angle);
-      xyz[ind + 1] = -std::cos(altitude_angles[ipx] * 2 * M_PI / 360.0) *
-                     std::sin(h_angle);
-      xyz[ind + 2] = std::sin(altitude_angles[ipx] * 2 * M_PI / 360.0);
-    }
-  }
-  return xyz;
-}
 /**
  * Generate a table of pixel offsets based on the scan width (512, 1024, or 2048
  * columns). These can be used to create a de-staggered range image where each
@@ -111,9 +77,10 @@ inline std::vector<int> get_px_offset(int lidar_mode)
  * which data is added for every point in the scan.
  */
 template<typename iterator_type, typename F, typename C>
-std::function<void(const uint8_t *, iterator_type it, uint64_t)>
-batch_to_iter(const std::vector<double> &xyz_lut, int W, int H,
-              const OS1::packet_format &pf,
+std::function<void(const uint8_t *, iterator_type it, uint64_t,
+                   std::optional<std::shared_ptr<OS1::ScanBatcher>>,
+                   std::optional<std::shared_ptr<OS1::LidarScan>>)>
+batch_to_iter(int W, int H, const OS1::packet_format &pf,
               const typename iterator_type::value_type &empty, C &&c, F &&f)
 {
   int next_m_id{W};
@@ -121,55 +88,19 @@ batch_to_iter(const std::vector<double> &xyz_lut, int W, int H,
 
   int64_t scan_ts{-1L};
 
-  return [=](const uint8_t *packet_buf, iterator_type it,
-             uint64_t override_ts) mutable {
-    for (int icol = 0; icol < pf.columns_per_packet; icol++) {
-      const uint8_t *col_buf = pf.nth_col(icol, packet_buf);
-      const uint16_t m_id = pf.col_measurement_id(col_buf);
-      const uint16_t f_id = pf.frame_id(col_buf);
-      const uint64_t ts = pf.col_timestamp(col_buf);
-      const bool valid = (pf.col_status(col_buf) & 0x01);
-
-      // drop invalid / out-of-bounds data in case of misconfiguration
-      if (!valid || m_id >= W || f_id + 1 == cur_f_id) { continue; }
-
-      if (f_id != cur_f_id) {
-        // if not initializing with first packet
-        if (scan_ts != -1) {
-          // zero out remaining missing columns
-          std::fill(it + (H * next_m_id), it + (H * W), empty);
-          f(override_ts == 0 ? scan_ts : override_ts);
-        }
-
-        // start new frame
-        scan_ts = ts;
-        next_m_id = 0;
-        cur_f_id = f_id;
-      }
-
-      // zero out missing columns if we jumped forward
-      if (m_id >= next_m_id) {
-        std::fill(it + (H * next_m_id), it + (H * m_id), empty);
-        next_m_id = m_id + 1;
-      }
-
-      // index of the first point in current packet
-      const int idx = H * m_id;
-
-      for (uint8_t ipx = 0; ipx < H; ipx++) {
-        const uint8_t *px_buf = pf.nth_px(ipx, col_buf);
-        uint32_t r = pf.px_range(px_buf);
-        int ind = 3 * (idx + ipx);
-
-        // x, y, z(m), intensity, ts, reflectivity, ring, column,
-        // noise, range (mm)
-        it[idx + ipx] =
-                c(r * 0.001f * xyz_lut[ind + 0], r * 0.001f * xyz_lut[ind + 1],
-                  r * 0.001f * xyz_lut[ind + 2], pf.px_signal(px_buf),
-                  ts - scan_ts, pf.px_reflectivity(px_buf), ipx, m_id,
-                  pf.px_ambient(px_buf), r);
-      }
+  return [=](const uint8_t *packet_buf, iterator_type it, uint64_t override_ts,
+             std::optional<std::shared_ptr<OS1::ScanBatcher>> scan_batcher =
+                     std::nullopt,
+             std::optional<std::shared_ptr<OS1::LidarScan>> lidar_scan =
+                     std::nullopt) mutable {
+    bool should_publish = false;
+    if (scan_batcher.has_value() && lidar_scan.has_value()) {
+      should_publish = (*scan_batcher.value())(packet_buf, lidar_scan.value());
     }
+
+    //FIXME(processor-publish): this will always call only the pointcloud publishing callback anyway,
+    //  we must inline the lidar_scan to pointcloud conversion either way
+    if (should_publish) f(override_ts);
   };
 }
 
@@ -288,6 +219,63 @@ inline version version_of_string(const std::string &s)
   if (is && c1 == 'v' && c2 == '.' && c3 == '.') return v;
   else
     return invalid_version;
+}
+
+/*
+ * From ouster_ros cartesian.hpp
+ * */
+template<typename T>
+using PointsT = Eigen::Array<T, -1, 3>;
+using PointsD = PointsT<double>;
+using PointsF = PointsT<float>;
+
+/**
+ * Converts a staggered range image to Cartesian points.
+ *
+ * @param[in, out] points The resulting point cloud, should be pre-allocated and
+ * have the same dimensions as the direction array.
+ * @param[in] range a range image in the same format as the RANGE field of a
+ * LidarScan.
+ * @param[in] direction the direction of an xyz lut.
+ * @param[in] offset the offset of an xyz lut.
+ *
+ * @return Cartesian points where ith row is a 3D point which corresponds
+ *         to ith pixel in LidarScan where i = row * w + col.
+ */
+template<typename T>
+void cartesianT(PointsT<T> &points,
+                const Eigen::Ref<const img_t<uint32_t>> &range,
+                const PointsT<T> &direction, const PointsT<T> &offset)
+{
+  assert(points.rows() == direction.rows() &&
+         "points & direction row count mismatch");
+  assert(points.rows() == offset.rows() &&
+         "points & offset row count mismatch");
+  assert(points.rows() == range.size() &&
+         "points and range image size mismatch");
+
+  const auto pts = points.data();
+  const auto *const rng = range.data();
+  const auto *const dir = direction.data();
+  const auto *const ofs = offset.data();
+
+  const auto N = range.size();
+  const auto col_x = 0 * N;// 1st column of points (x)
+  const auto col_y = 1 * N;// 2nd column of points (y)
+  const auto col_z = 2 * N;// 3rd column of points (z)
+
+  for (auto i = 0; i < N; ++i) {
+    const auto r = rng[i];
+    const auto idx_x = col_x + i;
+    const auto idx_y = col_y + i;
+    const auto idx_z = col_z + i;
+    if (r == 0) { pts[idx_x] = pts[idx_y] = pts[idx_z] = static_cast<T>(0.0); }
+    else {
+      pts[idx_x] = r * dir[idx_x] + ofs[idx_x];
+      pts[idx_y] = r * dir[idx_y] + ofs[idx_y];
+      pts[idx_z] = r * dir[idx_z] + ofs[idx_z];
+    }
+  }
 }
 
 }// namespace OS1

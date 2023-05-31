@@ -52,14 +52,11 @@ class ScanProcessor : public ros2_ouster::DataProcessorInterface
   ScanProcessor(const rclcpp_lifecycle::LifecycleNode::SharedPtr node,
                 const std::string &mdata, const std::string &frame,
                 const rclcpp::QoS &qos)
-      : DataProcessorInterface(), _node(node), _frame(frame),
-        _info(OS1::parse_metadata(mdata)), _pf(OS1::get_format(_info))
+      : DataProcessorInterface(mdata), _node(node), _frame(frame)
   {
     _pub = _node->create_publisher<sensor_msgs::msg::LaserScan>("scan", qos);
     _height = _pf.pixels_per_column;
     _width = OS1::n_cols_of_lidar_mode(_info.mode);
-    _xyz_lut = OS1::make_xyz_lut(_width, _height, _info.beam_azimuth_angles,
-                                 _info.beam_altitude_angles);
     _aggregated_scans.resize(_width * _height);
 
     double zero_angle = 9999.0;
@@ -72,7 +69,7 @@ class ScanProcessor : public ros2_ouster::DataProcessorInterface
     }
 
     _batch_and_publish = OS1::batch_to_iter<OSScanIt>(
-            _xyz_lut, _width, _height, _pf, {}, &scan_os::ScanOS::make,
+            _width, _height, _pf, {}, &scan_os::ScanOS::make,
             [&](uint64_t scan_ts) mutable {
               if (_pub->get_subscription_count() > 0 && _pub->is_activated()) {
                 auto msg_ptr = std::make_unique<sensor_msgs::msg::LaserScan>(
@@ -97,7 +94,7 @@ class ScanProcessor : public ros2_ouster::DataProcessorInterface
   bool process(uint8_t *data, uint64_t override_ts) override
   {
     OSScanIt it = _aggregated_scans.begin();
-    _batch_and_publish(data, it, override_ts);
+    _batch_and_publish(data, it, override_ts, std::nullopt, std::nullopt);
     return true;
   }
 
@@ -114,7 +111,10 @@ class ScanProcessor : public ros2_ouster::DataProcessorInterface
   private:
   rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::LaserScan>::SharedPtr
           _pub;
-  std::function<void(const uint8_t *, OSScanIt, uint64_t)> _batch_and_publish;
+  std::function<void(const uint8_t *, OSScanIt, uint64_t,
+                     std::optional<std::shared_ptr<OS1::ScanBatcher>>,
+                     std::optional<std::shared_ptr<OS1::LidarScan>>)>
+          _batch_and_publish;
   rclcpp_lifecycle::LifecycleNode::SharedPtr _node;
   std::vector<double> _xyz_lut;
   OSScan _aggregated_scans;
@@ -122,9 +122,6 @@ class ScanProcessor : public ros2_ouster::DataProcessorInterface
   uint32_t _height;
   uint32_t _width;
   uint8_t _ring;
-  //TODO(OS1-data): abstract this away to make ti independent of the OS1 structs?
-  OS1::sensor_info _info;
-  OS1::packet_format _pf;
 };
 
 }// namespace OS1

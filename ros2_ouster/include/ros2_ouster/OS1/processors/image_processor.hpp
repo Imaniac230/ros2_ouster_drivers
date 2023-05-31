@@ -52,14 +52,11 @@ class ImageProcessor : public ros2_ouster::DataProcessorInterface
   ImageProcessor(const rclcpp_lifecycle::LifecycleNode::SharedPtr node,
                  const std::string &mdata, const std::string &frame,
                  const rclcpp::QoS &qos)
-      : DataProcessorInterface(), _node(node), _frame(frame),
-        _info(OS1::parse_metadata(mdata)), _pf(OS1::get_format(_info))
+      : DataProcessorInterface(mdata), _node(node), _frame(frame)
   {
     _height = _pf.pixels_per_column;
     _width = OS1::n_cols_of_lidar_mode(_info.mode);
     _px_offset = OS1::get_px_offset(_width);
-    _xyz_lut = OS1::make_xyz_lut(_width, _height, _info.beam_azimuth_angles,
-                                 _info.beam_altitude_angles);
 
     _range_image_pub = _node->create_publisher<sensor_msgs::msg::Image>(
             "range_image", qos);
@@ -101,7 +98,7 @@ class ImageProcessor : public ros2_ouster::DataProcessorInterface
     _information_image.resize(_width * _height);
 
     _batch_and_publish = OS1::batch_to_iter<OSImageIt>(
-            _xyz_lut, _width, _height, _pf, {}, &image_os::ImageOS::make,
+            _width, _height, _pf, {}, &image_os::ImageOS::make,
             [&](uint64_t scan_ts) mutable {
               rclcpp::Time t(scan_ts);
               _range_image.header.stamp = t;
@@ -170,7 +167,7 @@ class ImageProcessor : public ros2_ouster::DataProcessorInterface
   bool process(uint8_t *data, uint64_t override_ts) override
   {
     OSImageIt it = _information_image.begin();
-    _batch_and_publish(data, it, override_ts);
+    _batch_and_publish(data, it, override_ts, std::nullopt, std::nullopt);
     return true;
   }
 
@@ -205,21 +202,20 @@ class ImageProcessor : public ros2_ouster::DataProcessorInterface
           _range_image_pub;
   rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::Image>::SharedPtr
           _noise_image_pub;
-  std::function<void(const uint8_t *, OSImageIt, uint64_t)> _batch_and_publish;
+  std::function<void(const uint8_t *, OSImageIt, uint64_t,
+                     std::optional<std::shared_ptr<OS1::ScanBatcher>>,
+                     std::optional<std::shared_ptr<OS1::LidarScan>>)>
+          _batch_and_publish;
   rclcpp_lifecycle::LifecycleNode::SharedPtr _node;
   sensor_msgs::msg::Image _reflectivity_image;
   sensor_msgs::msg::Image _intensity_image;
   sensor_msgs::msg::Image _range_image;
   sensor_msgs::msg::Image _noise_image;
-  std::vector<double> _xyz_lut;
   std::vector<int> _px_offset;
   OSImage _information_image;
   std::string _frame;
   uint32_t _height;
   uint32_t _width;
-  //TODO(OS1-data): abstract this away to make ti independent of the OS1 structs?
-  OS1::sensor_info _info;
-  OS1::packet_format _pf;
 };
 
 }// namespace OS1

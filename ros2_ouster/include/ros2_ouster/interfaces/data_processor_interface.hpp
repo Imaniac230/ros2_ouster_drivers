@@ -16,6 +16,8 @@
 
 #include <memory>
 #include <string>
+#include <utility>
+#include <optional>
 
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "ros2_ouster/interfaces/common.hpp"
@@ -31,11 +33,12 @@ namespace ros2_ouster
  */
 class DataProcessorInterface
 {
-public:
+  public:
   /**
    * @brief Constructor of the data processor interface
    */
-  DataProcessorInterface() {}
+  explicit DataProcessorInterface(const std::string &mdata)
+      : _info(OS1::parse_metadata(mdata)), _pf(OS1::get_format(_info)){};
 
   /**
    * @brief Destructor of the data processor interface
@@ -48,7 +51,7 @@ public:
    * @param override_ts Timestamp in nanos to use to override the ts in the
    *                    packet data. To use the packet data, pass as 0.
    */
-  virtual bool process(uint8_t * data, uint64_t override_ts = 0) = 0;
+  virtual bool process(uint8_t *data, uint64_t override_ts) = 0;
 
   /**
    * @brief Activating processor from lifecycle state transitions
@@ -59,8 +62,13 @@ public:
    * @brief Deactivating processor from lifecycle state transitions
    */
   virtual void onDeactivate() = 0;
+
+  protected:
+  //TODO(OS1-data): abstract this away to make ti independent of the OS1 structs?
+  OS1::sensor_info _info;
+  OS1::packet_format _pf;
 };
 
-}  // namespace ros2_ouster
+}// namespace ros2_ouster
 
-#endif  // ROS2_OUSTER__INTERFACES__DATA_PROCESSOR_INTERFACE_HPP_
+#endif// ROS2_OUSTER__INTERFACES__DATA_PROCESSOR_INTERFACE_HPP_

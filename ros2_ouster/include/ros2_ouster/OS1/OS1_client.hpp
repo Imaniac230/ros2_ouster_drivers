@@ -400,7 +400,8 @@ static bool recv_fixed(int fd, void *buf, size_t len)
     std::cerr << "recvfrom: " << std::strerror(errno) << std::endl;
   }
   else {
-    std::cerr << "Unexpected udp packet length: " << bytes_read << std::endl;
+    std::cerr << "Unexpected udp packet length -> got: " << bytes_read
+              << ", expected: " << len << std::endl;
   }
   return false;
 }

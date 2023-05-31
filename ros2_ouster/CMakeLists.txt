@@ -52,6 +52,7 @@ add_library(${library_name} SHARED
   src/OS1/OS1_sensor.cpp
   src/OS1/OS1_types.cpp
   src/OS1/OS1_parsing.cpp
+  src/OS1/OS1_lidar_scan.cpp
 )
 
 ament_target_dependencies(${library_name}

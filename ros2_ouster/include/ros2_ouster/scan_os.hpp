@@ -25,8 +25,7 @@ namespace scan_os
  * @brief The Point template for PCL to hold the information for
  * publishing in ROS2.
  */
-struct EIGEN_ALIGN16 ScanOS
-{
+struct EIGEN_ALIGN16 ScanOS {
   float intensity;
   uint32_t range;
   uint8_t ring;
@@ -44,15 +43,14 @@ struct EIGEN_ALIGN16 ScanOS
    * @param noise Noise value from reading
    * @param range Range value from reading
    */
-  static inline ScanOS make(
-    float x, float y, float z, float intensity,
-    uint32_t t, uint16_t reflectivity, uint8_t ring, uint8_t col,
-    uint16_t noise, uint32_t range)
+  static inline ScanOS make(float x, float y, float z, float intensity,
+                            uint32_t t, uint16_t reflectivity, uint8_t ring,
+                            uint8_t col, uint16_t noise, uint32_t range)
   {
     return {intensity, range, ring};
   }
 };
 
-}  // namespace scan_os
+}// namespace scan_os
 
-#endif  // ROS2_OUSTER__SCAN_OS_HPP_
+#endif// ROS2_OUSTER__SCAN_OS_HPP_

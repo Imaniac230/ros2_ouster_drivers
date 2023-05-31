@@ -25,14 +25,13 @@ namespace point_os
  * @brief The Point template for PCL to hold the information for
  * publishing in ROS2.
  */
-struct EIGEN_ALIGN16 PointOS
-{
+struct EIGEN_ALIGN16 PointOS {
   PCL_ADD_POINT4D;
   float intensity;
   uint32_t t;
   uint16_t reflectivity;
-  uint8_t ring;
-  uint16_t noise;
+  uint16_t ring;
+  uint16_t ambient;
   uint32_t range;
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
@@ -46,32 +45,26 @@ struct EIGEN_ALIGN16 PointOS
    * @param reflectivity Reflectivity value from reading
    * @param ring The ring ID the measurement came from
    * @param column The column of the reading in the ring
-   * @param noise Noise value from reading
+   * @param ambient Near IR ambient value from reading
    * @param range Range value from reading
    */
-  static inline PointOS make(
-    float x, float y, float z, float intensity,
-    uint32_t t, uint16_t reflectivity, uint8_t ring, uint8_t col,
-    uint16_t noise, uint32_t range)
+  static inline PointOS make(float x, float y, float z, float intensity,
+                             uint32_t t, uint16_t reflectivity, uint16_t ring,
+                             uint8_t col, uint16_t ambient, uint32_t range)
   {
-    return {x, y, z, 0.0, intensity, t, reflectivity, ring, noise, range};
+    return {x, y, z, 0.0, intensity, t, reflectivity, ring, ambient, range};
   }
 };
 
-}  // namespace point_os
+}// namespace point_os
 
 /* *INDENT-OFF* */
-POINT_CLOUD_REGISTER_POINT_STRUCT(point_os::PointOS,
-  (float, x, x)
-  (float, y, y)
-  (float, z, z)
-  (float, intensity, intensity)
-  (std::uint32_t, t, t)
-  (std::uint16_t, reflectivity, reflectivity)
-  (std::uint8_t, ring, ring)
-  (std::uint16_t, noise, noise)
-  (std::uint32_t, range, range)
-)
+POINT_CLOUD_REGISTER_POINT_STRUCT(
+        point_os::PointOS,
+        (float, x, x)(float, y, y)(float, z, z)(float, intensity, intensity)(
+                std::uint32_t, t, t)(std::uint16_t, reflectivity,
+                                     reflectivity)(std::uint16_t, ring, ring)(
+                std::uint16_t, ambient, ambient)(std::uint32_t, range, range))
 /* *INDENT-ON* */
 
-#endif  // ROS2_OUSTER__POINT_OS_HPP_
+#endif// ROS2_OUSTER__POINT_OS_HPP_

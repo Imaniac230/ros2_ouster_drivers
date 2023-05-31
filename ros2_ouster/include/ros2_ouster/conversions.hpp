@@ -172,6 +172,7 @@ toMsg(const pcl::PointCloud<point_os::PointOS> &cloud,
   std::size_t data_size = pt_size * cloud.points.size();
 
   pcl::PCLPointCloud2 cloud2;
+  //TODO(ospointcloud-to-pclpointcloud): why not use pcl::toPCLPointCloud2(cloud, cloud2)
   cloud2.height = cloud.height;
   cloud2.width = cloud.width;
   cloud2.fields.clear();

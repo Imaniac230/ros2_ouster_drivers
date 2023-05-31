@@ -46,8 +46,7 @@ class IMUProcessor : public ros2_ouster::DataProcessorInterface
   IMUProcessor(const rclcpp_lifecycle::LifecycleNode::SharedPtr node,
                const std::string &mdata, const std::string &frame,
                const rclcpp::QoS &qos)
-      : DataProcessorInterface(), _node(node), _frame(frame),
-        _info(OS1::parse_metadata(mdata)), _pf(OS1::get_format(_info))
+      : DataProcessorInterface(mdata), _node(node), _frame(frame)
   {
     _pub = node->create_publisher<sensor_msgs::msg::Imu>("imu", qos);
   }
@@ -83,9 +82,6 @@ class IMUProcessor : public ros2_ouster::DataProcessorInterface
   rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::Imu>::SharedPtr _pub;
   rclcpp_lifecycle::LifecycleNode::SharedPtr _node;
   std::string _frame;
-  //TODO(OS1-data): abstract this away to make ti independent of the OS1 structs?
-  OS1::sensor_info _info;
-  OS1::packet_format _pf;
 };
 
 }// namespace OS1
