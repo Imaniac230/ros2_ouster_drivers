@@ -171,8 +171,7 @@ void OusterDriver::onDeactivate()
     _process_thread.join();
   }
 
-  DataProcessorMapIt it;
-  for (it = _data_processors.begin(); it != _data_processors.end(); ++it) {
+  for (DataProcessorMapIt it = _data_processors.begin(); it != _data_processors.end(); ++it) {
     it->second->onDeactivate();
   }
 }
@@ -189,7 +188,9 @@ void OusterDriver::onShutdown()
 {
   _tf_b.reset();
 
-  DataProcessorMapIt it;
+  for (DataProcessorMapIt it = _data_processors.begin(); it != _data_processors.end(); ++it) {
+    it->second.reset();
+  }
   _data_processors.clear();
 }
 

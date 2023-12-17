@@ -3,6 +3,8 @@
  * @brief Implementation of Ouster client datatypes and constants. 
  */
 
+#include "ros2_ouster/client/types.h"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -11,7 +13,7 @@
 #include <sstream>
 #include <utility>
 
-#include "ros2_ouster/client/types.h"
+#include "ros2_ouster/client/logging.h"
 #include "ros2_ouster/client/version.h"
 
 // Declare namespaces from optional-lite
@@ -494,13 +496,10 @@ static sensor_config parse_config(const Json::Value& root) {
   } else if (!root["udp_ip"].empty()) {
     // deprecated params from FW 1.13. Set FW 2.0+ configs appropriately
     config.udp_dest = root["udp_ip"].asString();
-    //TODO(logger): consider using the spdlog library as well
-//    logger().warn(
-//            "Please note that udp_ip has been deprecated in favor "
-//            "of udp_dest. Will set udp_dest appropriately...");
+    logger().warn(
+            "Please note that udp_ip has been deprecated in favor "
+            "of udp_dest. Will set udp_dest appropriately...");
   }
-    std::cerr << "Please note that udp_ip has been deprecated in favor "
-                        "of udp_dest. Will set udp_dest appropriately..." << std::endl;
 
   if (!root["udp_port_lidar"].empty())
     config.udp_port_lidar = root["udp_port_lidar"].asInt();
@@ -532,11 +531,9 @@ static sensor_config parse_config(const Json::Value& root) {
       throw std::runtime_error{"Unexpected Operating Mode"};
     }
   } else if (!root["auto_start_flag"].empty()) {
-//    logger().warn(
-//            "Please note that auto_start_flag has been deprecated in favor "
-//            "of operating_mode. Will set operating_mode appropriately...");
-    std::cerr << "Please note that auto_start_flag has been deprecated in favor "
-                 "of operating_mode. Will set operating_mode appropriately..." << std::endl;
+    logger().warn(
+            "Please note that auto_start_flag has been deprecated in favor "
+            "of operating_mode. Will set operating_mode appropriately...");
     config.operating_mode = root["auto_start_flag"].asBool()
                                     ? sensor::OPERATING_NORMAL
                                     : sensor::OPERATING_STANDBY;
@@ -723,9 +720,8 @@ static data_format parse_data_format(const Json::Value& root) {
     format.column_window.first = root["column_window"][0].asInt();
     format.column_window.second = root["column_window"][1].asInt();
   } else {
-//    logger().warn(
-//            "No column window found. Using default column window (full)");
-    std::cerr << "No column window found. Using default column window (full)" << std::endl;
+    logger().warn(
+            "No column window found. Using default column window (full)");
     format.column_window = default_column_window(format.columns_per_frame);
   }
 
@@ -741,8 +737,7 @@ static data_format parse_data_format(const Json::Value& root) {
       throw std::runtime_error{"Unexpected udp lidar profile"};
     }
   } else {
-//    logger().warn("No lidar profile found. Using LEGACY lidar profile");
-    std::cerr << "No lidar profile found. Using LEGACY lidar profile" << std::endl;
+    logger().warn("No lidar profile found. Using LEGACY lidar profile");
     format.udp_profile_lidar = PROFILE_LIDAR_LEGACY;
   }
 
@@ -755,16 +750,14 @@ static data_format parse_data_format(const Json::Value& root) {
       throw std::runtime_error{"Unexpected udp imu profile"};
     }
   } else {
-//    logger().warn("No imu profile found. Using LEGACY imu profile");
-    std::cerr << "No imu profile found. Using LEGACY imu profile" << std::endl;
+    logger().warn("No imu profile found. Using LEGACY imu profile");
     format.udp_profile_imu = PROFILE_IMU_LEGACY;
   }
 
   if (root.isMember("fps")) {
     format.fps = root["fps"].asInt();
   } else {
-    // logger().warn("No fps found. Trying to use one from lidar mode (or
-    // 0)");
+    logger().warn("No fps found. Trying to use one from lidar mode (or 0)");
     format.fps = 0;
   }
 
@@ -807,12 +800,9 @@ static sensor_info parse_legacy(const std::string& meta) {
           "prod_sn", "build_rev"};
   for (auto field : desired_legacy_metadata_fields) {
     if (!root.isMember(field)) {
-//      logger().warn("No " + field +
-//                    " found in metadata. Will be left blank or filled in "
-//                    "with default legacy values");
-      std::cerr << "No " << field <<
-                           " found in metadata. Will be left blank or filled in "
-                           "with default legacy values" << std::endl;
+      logger().warn("No " + field +
+                    " found in metadata. Will be left blank or filled in "
+                    "with default legacy values");
     }
   }
 
@@ -821,21 +811,14 @@ static sensor_info parse_legacy(const std::string& meta) {
           "build_date", "image_rev", "prod_pn", "status"};
   for (auto field : not_parsed_metadata_fields) {
     if (!root.isMember(field)) {
-//      logger().warn(
-//              "No " + field +
-//              " found in metadata. Your metadata may be the result "
-//              "of calling to_string() on the sensor_info object OR "
-//              "you recorded this data with a very old version of "
-//              "Ouster Studio. We advise you to record the metadata "
-//              "directly "
-//              "with get_metadata and to update your Ouster Studio.");
-      std::cerr << "No " << field <<
-                           " found in metadata. Your metadata may be the result "
-                           "of calling to_string() on the sensor_info object OR "
-                           "you recorded this data with a very old version of "
-                           "Ouster Studio. We advise you to record the metadata "
-                           "directly "
-                           "with get_metadata and to update your Ouster Studio." << std::endl;
+      logger().warn(
+              "No " + field +
+              " found in metadata. Your metadata may be the result "
+              "of calling to_string() on the sensor_info object OR "
+              "you recorded this data with a very old version of "
+              "Ouster Studio. We advise you to record the metadata "
+              "directly "
+              "with get_metadata and to update your Ouster Studio.");
     }
   }
 
@@ -861,8 +844,7 @@ static sensor_info parse_legacy(const std::string& meta) {
       info.format.fps = frequency_of_lidar_mode(info.mode);
     }
   } else {
-//    logger().warn("No data_format found. Using default legacy data format");
-    std::cerr << "No data_format found. Using default legacy data format" << std::endl;
+    logger().warn("No data_format found. Using default legacy data format");
     info.format = default_data_format(info.mode);
   }
 
@@ -877,13 +859,10 @@ static sensor_info parse_legacy(const std::string& meta) {
         0) {  // is an OS-DOME - fill with 0
       info.lidar_origin_to_beam_origin_mm = 0;
     } else {  // not an OS-DOME
-//      logger().warn(
-//              "No lidar_origin_to_beam_origin_mm found. Using default "
-//              "value for the specified prod_line or default gen 1 values"
-//              "if prod_line is missing");
-      std::cerr << "No lidar_origin_to_beam_origin_mm found. Using default "
-      "value for the specified prod_line or default gen 1 values"
-      "if prod_line is missing" << std::endl;
+      logger().warn(
+              "No lidar_origin_to_beam_origin_mm found. Using default "
+              "value for the specified prod_line or default gen 1 values"
+              "if prod_line is missing");
       info.lidar_origin_to_beam_origin_mm =
               default_lidar_origin_to_beam_origin(
                       info.prod_line);  // note it is possible that
@@ -990,11 +969,9 @@ static sensor_info parse_legacy(const std::string& meta) {
       }
     }
   } else {
-//    logger().warn(
-//            "No valid imu_to_sensor_transform found. Using default for gen "
-//            "1");
-    std::cerr << "No valid imu_to_sensor_transform found. Using default for gen "
-                 "1" << std::endl;
+    logger().warn(
+            "No valid imu_to_sensor_transform found. Using default for gen "
+            "1");
     info.imu_to_sensor_transform = default_imu_to_sensor_transform;
   }
 
@@ -1009,13 +986,10 @@ static sensor_info parse_legacy(const std::string& meta) {
       }
     }
   } else {
-//    logger().warn(
-//            "No valid lidar_to_sensor_transform found. Using default for "
-//            "gen "
-//            "1");
-    std::cerr << "No valid lidar_to_sensor_transform found. Using default for "
-    "gen "
-    "1" << std::endl;
+    logger().warn(
+            "No valid lidar_to_sensor_transform found. Using default for "
+            "gen "
+            "1");
     info.lidar_to_sensor_transform = default_lidar_to_sensor_transform;
   }
 
@@ -1111,12 +1085,10 @@ sensor_info parse_metadata(const std::string& metadata) {
 
   sensor_info info{};
   if (is_new_format(metadata)) {
-//    logger().debug("parsing non-legacy metadata format");
-    std::cerr << "parsing non-legacy metadata format" << std::endl;
+    logger().debug("parsing non-legacy metadata format");
     info = parse_legacy(convert_to_legacy(metadata));
   } else {
-//    logger().debug("parsing legacy metadata format");
-    std::cerr << "parsing legacy metadata format" << std::endl;
+    logger().debug("parsing legacy metadata format");
     info = parse_legacy(metadata);
   }
   return info;

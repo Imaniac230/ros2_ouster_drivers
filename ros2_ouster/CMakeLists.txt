@@ -24,6 +24,7 @@ find_package(PCL REQUIRED COMPONENTS common)
 find_package(jsoncpp REQUIRED)
 find_package(CURL REQUIRED)
 find_package(tf2_eigen REQUIRED)
+find_package(spdlog REQUIRED)
 
 include_directories(
   include
@@ -64,6 +65,7 @@ add_library(${library_name} SHARED
   src/client/netcompat.cpp
   src/client/types.cpp
   src/client/parsing.cpp
+  src/client/logging.cpp
 )
 
 ament_target_dependencies(${library_name}
@@ -74,6 +76,7 @@ target_link_libraries(${library_name}
   jsoncpp_lib
   tins
   CURL::libcurl
+  spdlog::spdlog
   ${PCL_LIBRARIES}
 )
 

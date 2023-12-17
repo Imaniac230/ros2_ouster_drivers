@@ -10,6 +10,7 @@
 #include <thread>
 #include <vector>
 
+#include "ros2_ouster/client/logging.h"
 //#include "ouster/build.h"
 #include "ros2_ouster/client/impl/netcompat.h"
 #include "ros2_ouster/client/client_factory.hpp"
@@ -263,8 +264,7 @@ std::string get_metadata(client& cli, int timeout_sec, bool legacy_format) {
   try {
       cli.meta = collect_metadata(cli.hostname, timeout_sec);
   } catch (const std::exception& e) {
-//      logger().warn(std::string("Unable to retrieve sensor metadata: ") + e.what());
-      std::cerr << "Unable to retrieve sensor metadata: " << e.what() << std::endl;
+      logger().warn(std::string("Unable to retrieve sensor metadata: ") + e.what());
       throw;
   }
 
@@ -274,19 +274,13 @@ std::string get_metadata(client& cli, int timeout_sec, bool legacy_format) {
   builder["indentation"] = "    ";
   auto metadata_string = Json::writeString(builder, cli.meta);
   if (legacy_format) {
-//      logger().warn(
-//              "The SDK will soon output the non-legacy metadata format by "
-//              "default.  If you parse the metadata directly instead of using the "
-//              "SDK (which will continue to read both legacy and non-legacy "
-//              "formats), please be advised that on the next release you will "
-//              "either have to update your parsing or specify legacy_format = "
-//              "true to the get_metadata function.");
-      std::cerr << "The SDK will soon output the non-legacy metadata format by "
-                   "default.  If you parse the metadata directly instead of using the "
-                   "SDK (which will continue to read both legacy and non-legacy "
-                   "formats), please be advised that on the next release you will "
-                   "either have to update your parsing or specify legacy_format = "
-                   "true to the get_metadata function." << std::endl;
+      logger().warn(
+              "The SDK will soon output the non-legacy metadata format by "
+              "default.  If you parse the metadata directly instead of using the "
+              "SDK (which will continue to read both legacy and non-legacy "
+              "formats), please be advised that on the next release you will "
+              "either have to update your parsing or specify legacy_format = "
+              "true to the get_metadata function.");
   }
 
   // We can't insert this logic into the light init_client since its advantage
@@ -300,17 +294,12 @@ std::string get_metadata(client& cli, int timeout_sec, bool legacy_format) {
   // care
   if (fw_version.major >= 3 &&
       config.udp_profile_lidar == UDPProfileLidar::PROFILE_LIDAR_LEGACY) {
-//      logger().warn(
-//              "Please note that the Legacy Lidar Profile will be deprecated "
-//              "in the sensor FW soon. If you plan to upgrade your FW, we "
-//              "recommend using the Single Return Profile instead. For users "
-//              "sticking with older FWs, the Ouster SDK will continue to parse "
-//              "the legacy lidar profile.");
-      std::cerr << "Please note that the Legacy Lidar Profile will be deprecated "
-                   "in the sensor FW soon. If you plan to upgrade your FW, we "
-                   "recommend using the Single Return Profile instead. For users "
-                   "sticking with older FWs, the Ouster SDK will continue to parse "
-                   "the legacy lidar profile." << std::endl;
+      logger().warn(
+              "Please note that the Legacy Lidar Profile will be deprecated "
+              "in the sensor FW soon. If you plan to upgrade your FW, we "
+              "recommend using the Single Return Profile instead. For users "
+              "sticking with older FWs, the Ouster SDK will continue to parse "
+              "the legacy lidar profile.");
   }
   return legacy_format ? convert_to_legacy(metadata_string) : metadata_string;
 }
@@ -319,10 +308,8 @@ std::shared_ptr<client> init_client(
   const std::string & hostname, int lidar_port,
   int imu_port)
 {
-//  logger().info("initializing sensor: {} with lidar port/imu port: {}/{}",
-//                hostname, lidar_port, imu_port);
-  std::cout << "initializing sensor: " << hostname << " with lidar port/imu port: "
-            << lidar_port << "/" << imu_port << std::endl;
+  logger().info("initializing sensor: {} with lidar port/imu port: {}/{}",
+                hostname, lidar_port, imu_port);
 
   auto cli = std::make_shared<client>();
   cli->hostname = hostname;
@@ -376,8 +363,7 @@ std::shared_ptr<client> init_client(
           return {};
   } catch (const std::runtime_error& e) {
     // log error message
-//    logger().error("init_client(): {}", e.what());
-    std::cerr << "init_client(): " << e.what() << std::endl;
+    logger().error("init_client(): {}", e.what());
     return {};
   }
 
@@ -423,12 +409,9 @@ static bool recv_fixed(SOCKET fd, void * buf, int64_t len)
   if (bytes_read == len) {
     return true;
   } else if (bytes_read == -1) {
-//    logger().error("recvfrom: {}", impl::socket_get_error());
-  std::cerr << "recvfrom: " << impl::socket_get_error() << std::endl;
+    logger().error("recvfrom: {}", impl::socket_get_error());
   } else {
-//    logger().warn("Unexpected udp packet length: {}", bytes_read);
-  std::cerr << "Unexpected udp packet length: " << bytes_read << ", expected: "
-            << len << std::endl;
+    logger().warn("Unexpected udp packet length: {}, expected: {}", bytes_read, len);
   }
   return false;
 }
