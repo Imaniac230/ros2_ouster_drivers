@@ -87,6 +87,7 @@ public:
   void accumulate(const uint8_t * data, uint64_t override_ts)
   {
     if (_batchReady) {
+//      std::cout << "starting new scan, packets accumulated: " << _packets_accumulated << std::endl;
       _batchReady = false;
       _packets_accumulated = 0;
     }

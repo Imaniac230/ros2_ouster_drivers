@@ -142,6 +142,9 @@ private:
   bool reset_last_init_id = true;
   bool last_init_id_initialized = false;
   uint32_t last_init_id{};
+
+  uint16_t lastFrameID = -1;
+  uint16_t lastMeasID = -1;
 };
 
 }  // namespace sensor

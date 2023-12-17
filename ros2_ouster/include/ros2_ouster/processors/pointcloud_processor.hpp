@@ -111,6 +111,8 @@ public:
       _cloud_filtered->height = 1;
     }
 
+//    std::cout << "publishing cloud from accumulated packets: " << _fullRotationAccumulator->getPacketsAccumulated() << std::endl;
+
     _pub->publish(
       ros2_ouster::toMsg(
         *(_filter_zero_points ? _cloud_filtered : _cloud),

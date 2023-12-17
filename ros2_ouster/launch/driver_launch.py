@@ -49,7 +49,7 @@ def generate_launch_description():
                                 emulate_tty=True,
                                 parameters=[parameter_file],
                                 arguments=['--ros-args', '--log-level', 'INFO'],
-                                namespace='/',
+                                namespace='ouster',
                                 )
 
     configure_event = EmitEvent(

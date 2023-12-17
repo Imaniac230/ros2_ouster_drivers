@@ -786,6 +786,11 @@ public:
     uint16_t next_headers_m_id;
     LidarScan ls_write;
 
+    int packets_accumulated = 0;
+    std::chrono::time_point<std::chrono::system_clock> stamp = std::chrono::system_clock::now();
+    uint16_t lastMeasID = -1;
+    uint16_t lastFrameID = -1;
+
   public:
 
     sensor::packet_format pf;

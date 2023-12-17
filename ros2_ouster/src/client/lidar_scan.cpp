@@ -5,6 +5,8 @@
 #include <vector>
 #include <iostream>
 
+#include "ros2_ouster/client/logging.h"
+
 namespace ouster
 {
 
@@ -367,12 +369,10 @@ bool raw_headers_enabled(const sensor::packet_format& pf, const LidarScan& ls) {
     if (pf.pixels_per_column * sensor::field_type_size(raw_headers_ft) <
         (pf.packet_header_size + pf.col_header_size + pf.col_footer_size +
          pf.packet_footer_size)) {
-//        logger().debug(
-//            "WARNING: Can't fit RAW_HEADERS into a column of {} {} "
-//            "values",
-//            pf.pixels_per_column, to_string(raw_headers_ft));
-        std:: cerr << "WARNING: Can't fit RAW_HEADERS into a column of " << pf.pixels_per_column
-          << " " << to_string(raw_headers_ft) << " values" << std::endl;
+        logger().debug(
+            "WARNING: Can't fit RAW_HEADERS into a column of {} {} "
+            "values",
+            pf.pixels_per_column, to_string(raw_headers_ft));
         return false;
     }
     return true;
@@ -426,15 +426,20 @@ struct pack_raw_headers_col {
 
 bool ScanBatcher::operator()(const uint8_t * packet_buf, LidarScan & ls)
 {
+//  const auto new_stamp = std::chrono::system_clock::now();
+//    std::cout << "call delta: " << std::chrono::duration_cast<std::chrono::nanoseconds>(new_stamp - stamp).count() << " nanoseconds" << std::endl;
+//    stamp = new_stamp;
   if (ls.w != w || ls.h != h) {
     throw std::invalid_argument("unexpected scan dimensions");
   }
 
+  ++packets_accumulated;
   bool swapped = false;
 
   const bool raw_headers = raw_headers_enabled(pf, ls);
 
   const uint16_t f_id = pf.frame_id(packet_buf);
+//  std::cout << "packet frame ID: " << f_id << ", current frame ID: " << ls_write.frame_id << std::endl;
   if (ls_write.frame_id != f_id) {
     // if not initializing with first packet
     if (ls_write.frame_id != -1) {
@@ -452,10 +457,12 @@ bool ScanBatcher::operator()(const uint8_t * packet_buf, LidarScan & ls)
       // finish the scan and notify callback
       std::swap(ls, ls_write);
       swapped = true;
+//      std::cout << "swapping scan, packets accumulated: " << packets_accumulated << std::endl;
+      packets_accumulated = 0;
     }
 
-    // drop reordered packets from the previous frame
-    if (ls.frame_id == static_cast<uint16_t>(f_id + 1)) return false;
+    // drop reordered packets from any previous frames
+    if (ls.frame_id > static_cast<uint16_t>(f_id)) return false;
 
     // start new frame
     next_valid_m_id = 0;
@@ -474,6 +481,14 @@ bool ScanBatcher::operator()(const uint8_t * packet_buf, LidarScan & ls)
     const uint64_t ts = pf.col_timestamp(col_buf);
     const uint32_t status = pf.col_status(col_buf);
     const bool valid = (status & 0x01);
+
+//    std::cout << "meas ID: " << m_id << std::endl;
+//    if (f_id == lastFrameID) {
+//          const uint16_t mIDDiff = m_id - lastMeasID;
+//          if (mIDDiff > 1) {
+//              std::cout << "missing " << (mIDDiff + 1) / 16 << " packets (last: " << lastMeasID << ", new: " << m_id << ")" << std::endl;
+//          }
+//      }
 
     // drop invalid / out-of-bounds data in case of misconfiguration
     if (!valid || m_id >= w) {continue;}
@@ -509,8 +524,11 @@ bool ScanBatcher::operator()(const uint8_t * packet_buf, LidarScan & ls)
     ls.status()[m_id] = status;
 
     impl::foreach_field(ls, parse_field_col(), m_id, pf, col_buf);
+
+//    lastMeasID = m_id;
   }
 
+//  lastFrameID = f_id;
   return swapped;
 }
 
