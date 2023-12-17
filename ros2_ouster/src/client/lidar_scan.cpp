@@ -369,7 +369,7 @@ bool raw_headers_enabled(const sensor::packet_format& pf, const LidarScan& ls) {
     if (pf.pixels_per_column * sensor::field_type_size(raw_headers_ft) <
         (pf.packet_header_size + pf.col_header_size + pf.col_footer_size +
          pf.packet_footer_size)) {
-        logger().debug(
+        sensor::logger().debug(
             "WARNING: Can't fit RAW_HEADERS into a column of {} {} "
             "values",
             pf.pixels_per_column, to_string(raw_headers_ft));
