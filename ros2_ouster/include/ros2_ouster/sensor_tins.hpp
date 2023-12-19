@@ -113,9 +113,15 @@ public:
 
   /**
    * @brief Indicate whether a reactivation operation is required
-   * @return sensor metadata struct
+   * @return logical bool result
    */
   bool shouldReset(const ouster::sensor::client_state & state, const uint8_t * packet) override;
+
+  void reset_sensor(bool force_reinit, bool init_id_reset) override {}
+
+  void reactivate_sensor(bool init_id_reset) override {}
+
+  void update_metadata() override {}
 
   /**
    * @brief Load metadata from a file.

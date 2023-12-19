@@ -462,6 +462,7 @@ bool ScanBatcher::operator()(const uint8_t * packet_buf, LidarScan & ls)
     }
 
     // drop reordered packets from any previous frames
+    //TODO(frame-reorder): verify we didn't actually brake processing with this
     if (ls.frame_id > static_cast<uint16_t>(f_id)) return false;
 
     // start new frame

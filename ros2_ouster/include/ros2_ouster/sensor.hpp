@@ -98,12 +98,15 @@ public:
 
   /**
    * @brief Indicate whether a reactivation operation is required
-   * @return sensor metadata struct
+   * @return logical bool result
    */
   bool shouldReset(const ouster::sensor::client_state & state, const uint8_t * packet) override;
 
-  void reset_sensor(bool force_reinit, bool init_id_reset = false);
-  void reactivate_sensor(bool init_id_reset = false);
+  void reset_sensor(bool force_reinit, bool init_id_reset) override;
+
+  void reactivate_sensor(bool init_id_reset) override;
+
+  void update_metadata() override;
 
 private:
     [[nodiscard]] std::shared_ptr<ouster::sensor::client>
@@ -134,6 +137,8 @@ private:
     return info.format.udp_profile_lidar !=
            ouster::sensor::UDPProfileLidar::PROFILE_LIDAR_LEGACY;
     }
+
+    static void display_lidar_info(const ros2_ouster::Metadata& meta);
 
   std::shared_ptr<ouster::sensor::client> _ouster_client;
   ros2_ouster::Metadata _metadata{};

@@ -36,7 +36,7 @@ public:
   /**
    * @brief A sensor interface constructor
    */
-  SensorInterface() {}
+  SensorInterface() = default;
 
   /**
    * @brief A sensor interface destructor
@@ -106,9 +106,15 @@ public:
   /**
    * @brief Indicate whether a reactivation operation is required
    * @param packet data to read from
-   * @return sensor metadata struct
+   * @return logical bool result
    */
   virtual bool shouldReset(const ouster::sensor::client_state & state, const uint8_t * packet) = 0;
+
+  virtual void reset_sensor(bool force_reinit, bool init_id_reset) = 0;
+
+  virtual void reactivate_sensor(bool init_id_reset) = 0;
+
+  virtual void update_metadata() = 0;
 };
 
 }  // namespace ros2_ouster

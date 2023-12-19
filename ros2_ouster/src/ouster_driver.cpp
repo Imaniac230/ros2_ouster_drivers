@@ -24,6 +24,8 @@
 #include "ros2_ouster/sensor.hpp"
 #include "ros2_ouster/sensor_tins.hpp"
 
+using namespace std::string_literals;
+
 namespace ros2_ouster
 {
 
@@ -35,7 +37,9 @@ using namespace std::chrono_literals;
 OusterDriver::OusterDriver(
   std::unique_ptr<SensorInterface> sensor,
   const rclcpp::NodeOptions & options)
-: LifecycleInterface("OusterDriver", options), _sensor{std::move(sensor)}
+: LifecycleInterface("OusterDriver", options), _sensor{std::move(sensor)},
+      change_state_client{
+              create_client<ChangeState>(get_name() + "/change_state"s)}
 {
   // Declare parameters for configuring the _driver_
   this->declare_parameter("sensor_frame", std::string("laser_sensor_frame"));
@@ -46,8 +50,8 @@ OusterDriver::OusterDriver(
   this->declare_parameter("lidar_udp_profile", std::string("RNG19_RFL8_SIG16_NIR16"));
 
   // Declare parameters used across ALL _sensor_ implementations
-  this->declare_parameter<std::string>("lidar_ip","10.5.5.96");
-  this->declare_parameter<std::string>("computer_ip","10.5.5.1");
+  this->declare_parameter<std::string>("lidar_ip", "");
+  this->declare_parameter<std::string>("computer_ip","");
   this->declare_parameter("imu_port", 7503);
   this->declare_parameter("lidar_port", 7502);
   this->declare_parameter("lidar_mode", std::string("512x10"));
@@ -106,10 +110,6 @@ void OusterDriver::onConfigure()
     RCLCPP_FATAL(this->get_logger(), "Exception thrown: (%s)", e.what());
     exit(-1);
   }
-
-  RCLCPP_INFO(
-    this->get_logger(),
-    "This driver is compatible with sensors running fw 2.2-2.4");
 
   _reset_srv = this->create_service<std_srvs::srv::Empty>(
     "~/reset", std::bind(&OusterDriver::resetService, this, _1, _2, _3));
@@ -171,8 +171,8 @@ void OusterDriver::onDeactivate()
     _process_thread.join();
   }
 
-  for (DataProcessorMapIt it = _data_processors.begin(); it != _data_processors.end(); ++it) {
-    it->second->onDeactivate();
+  for (auto & _data_processor : _data_processors) {
+    _data_processor.second->onDeactivate();
   }
 }
 
@@ -188,8 +188,8 @@ void OusterDriver::onShutdown()
 {
   _tf_b.reset();
 
-  for (DataProcessorMapIt it = _data_processors.begin(); it != _data_processors.end(); ++it) {
-    it->second.reset();
+  for (auto & _data_processor : _data_processors) {
+    _data_processor.second.reset();
   }
   _data_processors.clear();
 }
@@ -218,30 +218,30 @@ void OusterDriver::processData() {
     _data_processors.equal_range(ouster::sensor::client_state::IMU_DATA);
 
   std::unique_lock<std::mutex> ringbuffer_guard(_ringbuffer_mutex);
-  while (_processing_active) {
+  while (_processing_active.load()) {
     // Wait for data in either the lidar or imu ringbuffer
     _process_cond.wait(
       ringbuffer_guard, [this] () {
         return (!_lidar_packet_buf->empty() ||
                 !_imu_packet_buf->empty() ||
-                !_processing_active);
+                !_processing_active.load());
     });
     ringbuffer_guard.unlock();
 
     uint64_t override_ts = this->_use_ros_time ? this->now().nanoseconds() : 0;
 
     // If we have data in the lidar buffer, process it
-    if (!_lidar_packet_buf->empty() && _processing_active) {
+    if (!_lidar_packet_buf->empty() && _processing_active.load()) {
       _full_rotation_accumulator->accumulate(_lidar_packet_buf->head(), override_ts);
-      for (DataProcessorMapIt it = key_lidar_its.first; it != key_lidar_its.second; it++) {
+      for (auto it = key_lidar_its.first; it != key_lidar_its.second; it++) {
         it->second->process(_lidar_packet_buf->head(), override_ts);
       }
       _lidar_packet_buf->pop();
     }
 
     // If we have data in the imu buffer, process it
-    if (!_imu_packet_buf->empty() && _processing_active) {
-      for (DataProcessorMapIt it = key_imu_its.first; it != key_imu_its.second; it++) {
+    if (!_imu_packet_buf->empty() && _processing_active.load()) {
+      for (auto it = key_imu_its.first; it != key_imu_its.second; it++) {
         it->second->process(_imu_packet_buf->head(), override_ts);
       }
       _imu_packet_buf->pop();
@@ -253,7 +253,7 @@ void OusterDriver::processData() {
 
 void OusterDriver::receiveData()
 {
-  while (_processing_active) {
+  while (_processing_active.load()) {
     try {
       // Receive raw sensor data from the network.
       // This blocks for some time until either data is received or timeout
@@ -311,7 +311,7 @@ void OusterDriver::handlePollError() {
             "maximum number of allowed errors from "
             "sensor::poll_client() reached, performing self reset...");
     _poll_error_count = 0;
-    _reset_srv.reset();
+    reset_sensor(true);
   }
 }
 
@@ -328,18 +328,7 @@ bool OusterDriver::handleLidarPacket(const ouster::sensor::client_state & state)
               "maximum number of allowed errors from "
               "sensor::read_lidar_packet() reached, reactivating...");
       _lidar_packet_error_count = 0;
-      //TODO(reset): perform only a reactivation instead of a full reset
-      _reset_srv.reset();
-
-//      reactivate_sensor(true);
-      ros2_ouster::Configuration lidar_config;
-      lidar_config.lidar_ip = get_parameter("lidar_ip").as_string();
-      lidar_config.computer_ip = get_parameter("computer_ip").as_string();
-      lidar_config.imu_port = get_parameter("imu_port").as_int();
-      lidar_config.lidar_port = get_parameter("lidar_port").as_int();
-      lidar_config.lidar_mode = get_parameter("lidar_mode").as_string();
-      lidar_config.timestamp_mode = get_parameter("timestamp_mode").as_string();
-      _sensor->reset(lidar_config, shared_from_this());
+      reactivate_sensor(true);
     }
     return false;
   }
@@ -349,18 +338,7 @@ bool OusterDriver::handleLidarPacket(const ouster::sensor::client_state & state)
     // TODO: short circut reset if no breaking changes occured?
     RCLCPP_WARN(get_logger(),
                 "sensor init_id has changed! reactivating..");
-    //TODO(reset): perform only a reactivation instead of a full reset
-    _reset_srv.reset();
-
-//    reactivate_sensor(false);
-    ros2_ouster::Configuration lidar_config;
-    lidar_config.lidar_ip = get_parameter("lidar_ip").as_string();
-    lidar_config.computer_ip = get_parameter("computer_ip").as_string();
-    lidar_config.imu_port = get_parameter("imu_port").as_int();
-    lidar_config.lidar_port = get_parameter("lidar_port").as_int();
-    lidar_config.lidar_mode = get_parameter("lidar_mode").as_string();
-    lidar_config.timestamp_mode = get_parameter("timestamp_mode").as_string();
-    _sensor->reset(lidar_config, shared_from_this());
+    reactivate_sensor(false);
     return false;
   }
 
@@ -378,18 +356,7 @@ bool OusterDriver::handleImuPacket(const ouster::sensor::client_state & state)
               "maximum number of allowed errors from "
               "sensor::read_lidar_packet() reached, reactivating...");
       _imu_packet_error_count = 0;
-      //TODO(reset): perform only a reactivation instead of a full reset
-      _reset_srv.reset();
-
-//      reactivate_sensor(true);
-      ros2_ouster::Configuration lidar_config;
-      lidar_config.lidar_ip = get_parameter("lidar_ip").as_string();
-      lidar_config.computer_ip = get_parameter("computer_ip").as_string();
-      lidar_config.imu_port = get_parameter("imu_port").as_int();
-      lidar_config.lidar_port = get_parameter("lidar_port").as_int();
-      lidar_config.lidar_mode = get_parameter("lidar_mode").as_string();
-      lidar_config.timestamp_mode = get_parameter("timestamp_mode").as_string();
-      _sensor->reset(lidar_config, shared_from_this());
+      reactivate_sensor(true);
     }
     return false;
   }
@@ -446,6 +413,106 @@ void OusterDriver::getMetadata(
         request->metadata_filepath.c_str());
     }
   }
+}
+
+std::string OusterDriver::transition_id_to_string(uint8_t transition_id) {
+  switch (transition_id) {
+    case lifecycle_msgs::msg::Transition::TRANSITION_CREATE:
+      return "create"s;
+    case lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE:
+      return "configure"s;
+    case lifecycle_msgs::msg::Transition::TRANSITION_CLEANUP:
+      return "cleanup"s;
+    case lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE:
+      return "activate";
+    case lifecycle_msgs::msg::Transition::TRANSITION_DEACTIVATE:
+      return "deactivate"s;
+    case lifecycle_msgs::msg::Transition::TRANSITION_DESTROY:
+      return "destroy"s;
+    default:
+      return "unknown"s;
+  }
+}
+
+template <typename CallbackT, typename... CallbackT_Args>
+bool OusterDriver::change_state(std::uint8_t transition_id, CallbackT callback,
+                          CallbackT_Args... callback_args,
+                          std::chrono::seconds time_out) {
+  if (!change_state_client->wait_for_service(time_out)) {
+    RCLCPP_ERROR_STREAM(
+            get_logger(), "Service " << change_state_client->get_service_name()
+                                     << "is not available.");
+    return false;
+  }
+
+  auto request = std::make_shared<ChangeState::Request>();
+  request->transition.id = transition_id;
+  // send an async request to perform the transition
+  change_state_client->async_send_request(
+          request, [callback,
+                    callback_args...](rclcpp::Client<ChangeState>::SharedFuture) {
+            callback(callback_args...);
+          });
+  return true;
+}
+
+void OusterDriver::execute_transitions_sequence(
+        std::vector<uint8_t> transitions_sequence, size_t at) {
+  assert(at < transitions_sequence.size() &&
+         "at index exceeds the number of transitions");
+  auto transition_id = transitions_sequence[at];
+  RCLCPP_DEBUG_STREAM(
+          get_logger(), "transition: [" << transition_id_to_string(transition_id)
+                                        << "] started");
+  change_state(transition_id, [this, transitions_sequence, at]() {
+    RCLCPP_DEBUG_STREAM(
+            get_logger(),
+            "transition: [" << transition_id_to_string(transitions_sequence[at])
+                            << "] completed");
+    if (at < transitions_sequence.size() - 1) {
+      execute_transitions_sequence(transitions_sequence, at + 1);
+    } else {
+      RCLCPP_DEBUG_STREAM(get_logger(), "transitions sequence completed");
+    }
+  });
+}
+
+// param init_id_reset is overriden to true when force_reinit is true
+void OusterDriver::reset_sensor(bool force_reinit, bool init_id_reset) {
+  if (!_processing_active.load()) {
+    RCLCPP_WARN(get_logger(),
+                "sensor reset is invoked but sensor connection is not "
+                "active, ignoring call!");
+    return;
+  }
+
+  _sensor->reset_sensor(force_reinit, init_id_reset);
+  auto request_transitions = std::vector<uint8_t>{
+          lifecycle_msgs::msg::Transition::TRANSITION_DEACTIVATE,
+          lifecycle_msgs::msg::Transition::TRANSITION_CLEANUP,
+          lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE,
+          lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE};
+  execute_transitions_sequence(request_transitions, 0);
+}
+
+// TODO: need to notify dependent node(s) of the update
+void OusterDriver::reactivate_sensor(bool init_id_reset) {
+  if (!_processing_active.load()) {
+    //     This may indicate that we are in the process of re-activation
+    RCLCPP_WARN(get_logger(),
+                "sensor reactivate is invoked but sensor connection is "
+                "not active, ignoring call!");
+    return;
+  }
+
+  _sensor->reactivate_sensor(init_id_reset);
+  _sensor->update_metadata();
+//  publish_metadata();
+//  save_metadata();
+  auto request_transitions = std::vector<uint8_t>{
+          lifecycle_msgs::msg::Transition::TRANSITION_DEACTIVATE,
+          lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE};
+  execute_transitions_sequence(request_transitions, 0);
 }
 
 }  // namespace ros2_ouster

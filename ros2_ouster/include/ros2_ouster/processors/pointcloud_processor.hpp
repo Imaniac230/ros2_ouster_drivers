@@ -22,6 +22,7 @@
 #include "rclcpp/qos.hpp"
 
 #include "ros2_ouster/conversions.hpp"
+#include "ros2_ouster/ros2_utils.hpp"
 
 #include "sensor_msgs/msg/point_cloud2.hpp"
 
@@ -59,7 +60,7 @@ public:
     std::shared_ptr<sensor::FullRotationAccumulator> fullRotationAccumulator)
   : DataProcessorInterface(), _node(node), _frame(std::move(frame))
   {
-    _node->declare_parameter("pointcloud_filter_zero_points", false);
+    ros2_ouster::declare_parameter_if_not_declared(_node, "pointcloud_filter_zero_points", rclcpp::ParameterValue(false));
     _node->get_parameter("pointcloud_filter_zero_points", _filter_zero_points);
 
     _fullRotationAccumulator = std::move(fullRotationAccumulator);

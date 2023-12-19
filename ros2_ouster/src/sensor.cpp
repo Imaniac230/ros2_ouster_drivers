@@ -11,12 +11,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "ros2_ouster/sensor.hpp"
+
 #include <string>
 #include <sstream>
+
+#include "ros2_ouster/client/logging.h"
 #include "ros2_ouster/client/client.h"
 #include "ros2_ouster/exception.hpp"
 #include "ros2_ouster/interfaces/metadata.hpp"
-#include "ros2_ouster/sensor.hpp"
 
 namespace sensor
 {
@@ -35,9 +38,6 @@ void Sensor::reset(
 {
   _ouster_client.reset();
 
-  //TODO(force-reinit): currently always forcing reinit, rethink this later?
-  reactivate_sensor(true);
-
   configure(config, node);
 }
 
@@ -53,17 +53,19 @@ void Sensor::configure(
   if (!ouster::sensor::lidar_mode_of_string(config.lidar_mode)) {
     throw ros2_ouster::OusterDriverException(
             "Invalid lidar mode: " + config.lidar_mode);
-    exit(-1);
   }
 
   if (!ouster::sensor::timestamp_mode_of_string(config.timestamp_mode)) {
     throw ros2_ouster::OusterDriverException(
             "Invalid timestamp mode: " + config.timestamp_mode);
-    exit(-1);
   }
 
   // Report to the user whether automatic address detection is being used, and 
   // what the source / destination IPs are
+  if (config.lidar_ip.empty()) {
+    throw ros2_ouster::OusterDriverException(
+            "Cannot connect to sensor, lidar ip was not provided.");
+  }
   RCLCPP_INFO(
     node->get_logger(),
     "Connecting to sensor at %s.", config.lidar_ip.c_str());
@@ -85,6 +87,8 @@ void Sensor::configure(
   }
 
   setMetadata(config.lidar_port, config.imu_port, config.timestamp_mode);
+
+  display_lidar_info(_metadata);
 }
 
 bool Sensor::shouldReset(const ouster::sensor::client_state & state, const uint8_t * packet)
@@ -98,7 +102,7 @@ std::shared_ptr<ouster::sensor::client> Sensor::configure_and_initialize_sensor(
         const ros2_ouster::Configuration &config)
 {
   ouster::sensor::sensor_config sensor_config{};
-  sensor_config.udp_dest = config.computer_ip;
+  if (!config.computer_ip.empty()) sensor_config.udp_dest = config.computer_ip;
   sensor_config.udp_port_imu = config.imu_port;
   sensor_config.udp_port_lidar = config.lidar_port;
   sensor_config.ld_mode = ouster::sensor::lidar_mode_of_string(config.lidar_mode);
@@ -111,10 +115,9 @@ std::shared_ptr<ouster::sensor::client> Sensor::configure_and_initialize_sensor(
     throw std::runtime_error("Error connecting to sensor " + config.lidar_ip);
   }
 
-  std::cout << "Sensor " << config.lidar_ip
-            << " configured successfully, initializing client" << std::endl;
+  ouster::sensor::logger().info("Sensor {} configured successfully, initializing client.", config.lidar_ip);
 
-  return ouster::sensor::init_client(config.lidar_ip, sensor_config.udp_dest.value(),
+  return ouster::sensor::init_client(config.lidar_ip, sensor_config.udp_dest.value_or(""),
                           sensor_config.ld_mode.value(),
                           sensor_config.ts_mode.value(),
                           sensor_config.udp_port_lidar.value(),
@@ -214,60 +217,60 @@ uint8_t Sensor::compose_config_flags(const ouster::sensor::sensor_config &config
 {
   uint8_t config_flags = 0;
   if (config.udp_dest) {
-    std::cout << "Will send UDP data to " << config.udp_dest.value()
-              << std::endl;
+    ouster::sensor::logger().info("Will send UDP data to {}", config.udp_dest.value());
   }
   else {
-    std::cout << "Will use automatic UDP destination" << std::endl;
+    ouster::sensor::logger().info("Will use automatic UDP destination");
     config_flags |= ouster::sensor::CONFIG_UDP_DEST_AUTO;
   }
 
   if (force_sensor_reinit) {
     force_sensor_reinit = false;
-    std::cout << "Forcing sensor to reinitialize" << std::endl;
+    ouster::sensor::logger().info("Forcing sensor to reinitialize");
     config_flags |= ouster::sensor::CONFIG_FORCE_REINIT;
   }
 
   return config_flags;
 }
 
-// param init_id_reset is overriden to true when force_reinit is true
 void Sensor::reset_sensor(bool force_reinit, bool init_id_reset) {
-//  if (!sensor_connection_active) {
-//    RCLCPP_WARN(get_logger(),
-//                "sensor reset is invoked but sensor connection is not "
-//                "active, ignoring call!");
-//    return;
-//  }
-
   force_sensor_reinit = force_reinit;
   reset_last_init_id = force_reinit || init_id_reset;
-//  auto request_transitions = std::vector<uint8_t>{
-//          lifecycle_msgs::msg::Transition::TRANSITION_DEACTIVATE,
-//          lifecycle_msgs::msg::Transition::TRANSITION_CLEANUP,
-//          lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE,
-//          lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE};
-//  execute_transitions_sequence(request_transitions, 0);
 }
 
-// TODO: need to notify dependent node(s) of the update
 void Sensor::reactivate_sensor(bool init_id_reset) {
-//  if (!sensor_connection_active) {
-//     This may indicate that we are in the process of re-activation
-//    RCLCPP_WARN(get_logger(),
-//                "sensor reactivate is invoked but sensor connection is "
-//                "not active, ignoring call!");
-//    return;
-//  }
-
   reset_last_init_id = init_id_reset;
-//  update_config_and_metadata();
-//  publish_metadata();
-//  save_metadata();
-//  auto request_transitions = std::vector<uint8_t>{
-//          lifecycle_msgs::msg::Transition::TRANSITION_DEACTIVATE,
-//          lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE};
-//  execute_transitions_sequence(request_transitions, 0);
+}
+
+void Sensor::update_metadata() {
+  const auto old_metadata = _metadata;
+  try {
+    _metadata = ros2_ouster::Metadata(
+            ouster::sensor::parse_metadata(
+                    ouster::sensor::get_metadata(*_ouster_client, 60)),
+            old_metadata.udp_port_imu, old_metadata.udp_port_lidar, old_metadata.timestamp_mode);
+  } catch (const std::exception& e) {
+    ouster::sensor::logger().error("sensor::get_metadata exception: {}", e.what());
+    _metadata = {};
+  }
+
+  ros2_ouster::populate_missing_metadata_defaults(_metadata, ouster::sensor::MODE_UNSPEC);
+
+  //    publish_metadata();
+  //    save_metadata();
+  display_lidar_info(_metadata);
+}
+
+void Sensor::display_lidar_info(const ros2_ouster::Metadata& meta) {
+    ouster::sensor::logger().info(
+          "sensor name: {}\n"
+          "\t\tproduct: {}, sn: {}, firmware rev: {}\n"
+          "\t\tlidar mode: {}, lidar udp profile: {}\n"
+          /*"\t\touster client version: {}"*/,
+          meta.name,
+          meta.prod_line, meta.sn, meta.fw_rev,
+          ouster::sensor::to_string(meta.mode), ouster::sensor::to_string(meta.format.udp_profile_lidar)/*,
+          ouster::SDK_VERSION_FULL*/);
 }
 
 }  // namespace sensor

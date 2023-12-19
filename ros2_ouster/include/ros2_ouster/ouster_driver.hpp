@@ -20,6 +20,8 @@
 #include <fstream>
 #include <sstream>
 
+#include <lifecycle_msgs/srv/change_state.hpp>
+
 #include "ros2_ouster/conversions.hpp"
 
 #include "ros2_ouster/interfaces/lifecycle_interface.hpp"
@@ -37,6 +39,9 @@
 #include "ros2_ouster/full_rotation_accumulator.hpp"
 
 #include "ros2_ouster/ringbuffer.hpp"
+
+using lifecycle_msgs::srv::ChangeState;
+using rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface;
 
 namespace ros2_ouster
 {
@@ -146,8 +151,22 @@ private:
   bool handleLidarPacket(const  ouster::sensor::client_state & state);
   bool handleImuPacket(const  ouster::sensor::client_state & state);
 
+  static std::string transition_id_to_string(uint8_t transition_id);
+  template <typename CallbackT, typename... CallbackT_Args>
+  bool change_state(std::uint8_t transition_id, CallbackT callback,
+                    CallbackT_Args... callback_args,
+                    std::chrono::seconds time_out = std::chrono::seconds{3});
+  void execute_transitions_sequence(
+        std::vector<uint8_t> transitions_sequence, size_t at);
+
+  // param init_id_reset is overriden to true when force_reinit is true
+  void reset_sensor(bool force_reinit, bool init_id_reset = false);
+  // TODO: need to notify dependent node(s) of the update
+  void reactivate_sensor(bool init_id_reset = false);
+
   rclcpp::Service<std_srvs::srv::Empty>::SharedPtr _reset_srv;
   rclcpp::Service<ouster_msgs::srv::GetMetadata>::SharedPtr _metadata_srv;
+  std::shared_ptr<rclcpp::Client<ChangeState>> change_state_client;
 
   std::unique_ptr<SensorInterface> _sensor;
   std::multimap<ouster::sensor::client_state,
@@ -172,7 +191,7 @@ private:
   std::thread _process_thread;
   std::condition_variable _process_cond;
   std::mutex _ringbuffer_mutex;
-  bool _processing_active;
+  std::atomic_bool _processing_active;
 
   int _poll_error_count = 0;
   static constexpr int _max_poll_error_count = 10;
