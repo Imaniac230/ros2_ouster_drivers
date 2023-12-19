@@ -50,8 +50,7 @@ int32_t get_sock_port(SOCKET sock_fd)
   if (!impl::socket_valid(
       getsockname(sock_fd, (struct sockaddr *)&ss, &addrlen)))
   {
-    std::cerr << "udp getsockname(): " << impl::socket_get_error() <<
-      std::endl;
+    logger().error("udp getsockname(): {}", impl::socket_get_error());
     return SOCKET_ERROR;
   }
 
@@ -64,13 +63,12 @@ int32_t get_sock_port(SOCKET sock_fd)
   }
 }
 
-//TODO(udp-socket): port from ouster sdk?
 SOCKET udp_data_socket(int port)
 {
   struct addrinfo hints{}, * info_start, * ai;
 
   memset(&hints, 0, sizeof hints);
-  hints.ai_family = AF_INET6;
+  hints.ai_family = AF_UNSPEC;
   hints.ai_socktype = SOCK_DGRAM;
   hints.ai_flags = AI_PASSIVE;
 
@@ -78,69 +76,73 @@ SOCKET udp_data_socket(int port)
 
   int ret = getaddrinfo(nullptr, port_s.c_str(), &hints, &info_start);
   if (ret != 0) {
-    std::cerr << "getaddrinfo(): " << gai_strerror(ret) << std::endl;
+    logger().error("udp getaddrinfo(): {}", gai_strerror(ret));
     return SOCKET_ERROR;
   }
   if (info_start == nullptr) {
-    std::cerr << "getaddrinfo: empty result" << std::endl;
+    logger().error("udp getaddrinfo(): empty result");
     return SOCKET_ERROR;
   }
 
-  SOCKET sock_fd;
-  for (ai = info_start; ai != nullptr; ai = ai->ai_next) {
-    sock_fd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
-    if (!impl::socket_valid(sock_fd)) {
-      std::cerr << "udp socket(): " << impl::socket_get_error() <<
-        std::endl;
-      continue;
-    }
+  // try to bind a dual-stack ipv6 socket, but fall back to ipv4 only if that
+  // fails (when ipv6 is disabled via kernel parameters). Use two passes to
+  // deal with glibc addrinfo ordering:
+  // https://sourceware.org/bugzilla/show_bug.cgi?id=9981
+  for (auto preferred_af : {AF_INET6, AF_INET}) {
+    for (ai = info_start; ai != nullptr; ai = ai->ai_next) {
+      if (ai->ai_family != preferred_af) continue;
 
-    int off = 0;
-    if (setsockopt(
-        sock_fd, IPPROTO_IPV6, IPV6_V6ONLY, (char *)&off,
-        sizeof(off)))
-    {
-      std::cerr << "udp setsockopt(): " << impl::socket_get_error() <<
-        std::endl;
-      impl::socket_close(sock_fd);
-      return SOCKET_ERROR;
-    }
+      // choose first addrinfo where bind() succeeds
+      SOCKET sock_fd =
+              socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+      if (!impl::socket_valid(sock_fd)) {
+        logger().warn("udp socket(): {}", impl::socket_get_error());
+        continue;
+      }
 
-    if (bind(sock_fd, ai->ai_addr, (socklen_t)ai->ai_addrlen)) {
-      impl::socket_close(sock_fd);
-      std::cerr << "udp bind(): " << impl::socket_get_error() <<
-        std::endl;
-      continue;
-    }
+      int off = 0;
+      if (ai->ai_family == AF_INET6 &&
+          setsockopt(sock_fd, IPPROTO_IPV6, IPV6_V6ONLY, (char*)&off,
+                     sizeof(off))) {
+        logger().warn("udp setsockopt(): {}", impl::socket_get_error());
+        impl::socket_close(sock_fd);
+        continue;
+      }
 
-    break;
+      if (impl::socket_set_reuse(sock_fd)) {
+        logger().warn("udp socket_set_reuse(): {}",
+                      impl::socket_get_error());
+      }
+
+      if (::bind(sock_fd, ai->ai_addr, (socklen_t)ai->ai_addrlen)) {
+        logger().warn("udp bind(): {}", impl::socket_get_error());
+        impl::socket_close(sock_fd);
+        continue;
+      }
+
+      // bind() succeeded; set some options and return
+      if (impl::socket_set_non_blocking(sock_fd)) {
+        logger().warn("udp fcntl(): {}", impl::socket_get_error());
+        impl::socket_close(sock_fd);
+        continue;
+      }
+
+      if (setsockopt(sock_fd, SOL_SOCKET, SO_RCVBUF, (char*)&RCVBUF_SIZE,
+                     sizeof(RCVBUF_SIZE))) {
+        logger().warn("udp setsockopt(): {}", impl::socket_get_error());
+        impl::socket_close(sock_fd);
+        continue;
+      }
+
+      freeaddrinfo(info_start);
+      return sock_fd;
+    }
   }
 
+  // could not bind() a UDP server socket
   freeaddrinfo(info_start);
-  if (ai == nullptr) {
-    impl::socket_close(sock_fd);
-    return SOCKET_ERROR;
-  }
-
-  if (!impl::socket_valid(impl::socket_set_non_blocking(sock_fd))) {
-    std::cerr << "udp fcntl(): " << impl::socket_get_error() << std::endl;
-    impl::socket_close(sock_fd);
-    return SOCKET_ERROR;
-  }
-
-  if (!impl::socket_valid(
-      setsockopt(
-        sock_fd, SOL_SOCKET, SO_RCVBUF,
-        (char *)&RCVBUF_SIZE,
-        sizeof(RCVBUF_SIZE))))
-  {
-    std::cerr << "udp setsockopt(): " << impl::socket_get_error() <<
-      std::endl;
-    impl::socket_close(sock_fd);
-    return SOCKET_ERROR;
-  }
-
-  return sock_fd;
+  logger().error("failed to bind udp socket");
+  return SOCKET_ERROR;
 }
 
 Json::Value collect_metadata(const std::string& hostname, int timeout_sec) {
