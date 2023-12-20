@@ -9,6 +9,8 @@ ouster/ouster_driver:
     laser_frame: os_lidar
     imu_frame: os_imu
 
+    scan_ring: -1
+
     # if False, data are published with sensor data QoS. This is preferrable
     # for production but default QoS is needed for rosbag.
     # See: https://github.com/ros2/rosbag2/issues/125

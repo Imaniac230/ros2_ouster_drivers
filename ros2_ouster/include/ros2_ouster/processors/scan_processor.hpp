@@ -54,17 +54,34 @@ public:
     std::shared_ptr<sensor::FullRotationAccumulator> fullRotationAccumulator)
   : DataProcessorInterface(), _node(node), _frame(std::move(frame)), _pf(std::move(pf))
   {
+    int ring = -1;
+    ros2_ouster::declare_parameter_if_not_declared(_node, "scan_ring", rclcpp::ParameterValue(-1));
+    _node->get_parameter("scan_ring", ring);
+
     _fullRotationAccumulator = std::move(fullRotationAccumulator);
     _mdata = mdata;
     _pub = _node->create_publisher<sensor_msgs::msg::LaserScan>("scan", qos);
 
-    double zero_angle = 9999.0;
-    _ring = 0;
-    for (uint i = 0; i != _mdata.beam_altitude_angles.size(); i++) {
-      if (fabs(_mdata.beam_altitude_angles[i]) < zero_angle) {
-        _ring = static_cast<uint8_t>(i);
-        zero_angle = fabs(_mdata.beam_altitude_angles[i]);
+    if (ring == -1) {
+      double zero_angle = 9999.0;
+      _ring = 0;
+      for (uint i = 0; i != _mdata.beam_altitude_angles.size(); i++) {
+        if (fabs(_mdata.beam_altitude_angles[i]) < zero_angle) {
+          _ring = static_cast<uint8_t>(i);
+          zero_angle = fabs(_mdata.beam_altitude_angles[i]);
+        }
       }
+
+      RCLCPP_INFO(_node->get_logger(), "Scan ring was not specified."
+                                       " Automatically selected ring: %d", _ring);
+    } else {
+      const auto max_ring = static_cast<int>(_mdata.beam_altitude_angles.size() - 1);
+      _ring = std::min(std::max(ring, 0), max_ring);
+      if (_ring != ring)
+        RCLCPP_WARN(_node->get_logger(),
+                    "Scan ring is set to a value that exceeds available range."
+                    " Please choose a value between 0 and %d. Ring value clamped to: %d.",
+                    max_ring, _ring);
     }
   }
 
