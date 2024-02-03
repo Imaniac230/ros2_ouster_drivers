@@ -149,11 +149,12 @@ bool Sensor::readLidarPacket(const ouster::sensor::client_state & state, uint8_t
     const auto pf = this->getPacketFormat();
     const bool success = ouster::sensor::read_lidar_packet(*_ouster_client, buf, pf);
 
-    if (!success) std::cout << "ERROR reading lidar packet!" << std::endl;
+    const auto timeStamp = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+    if (!success) std::cout << "[" << timeStamp << "] ERROR reading lidar packet!" << std::endl;
     const uint16_t f_id = pf.frame_id(buf);
     const uint16_t fIDDiff = f_id - lastFrameID;
     if (fIDDiff > 1) {
-      std::cout << "missing " << (fIDDiff - 1) << " whole frames (last f_id: " << lastFrameID << ", new f_id: " << f_id << ")" << std::endl;
+      std::cout << "[" << timeStamp << "] missing " << (fIDDiff - 1) << " whole frames (last f_id: " << lastFrameID << ", new f_id: " << f_id << ")" << std::endl;
     }
     for (int icol = 0; icol < pf.columns_per_packet; icol++) {
       const uint8_t* col_buf = pf.nth_col(icol, buf);
@@ -161,10 +162,10 @@ bool Sensor::readLidarPacket(const ouster::sensor::client_state & state, uint8_t
       if (f_id == lastFrameID) {
         const uint16_t mIDDiff = m_id - lastMeasID;
         if (mIDDiff > 1) {
-          std::cout << "missing " << (mIDDiff + 1) / 16 << " packets (last m_id: " << lastMeasID << ", new m_id: " << m_id << ")" << std::endl;
+          std::cout << "[" << timeStamp << "] missing " << (mIDDiff + 1) / 16 << " packets (last m_id: " << lastMeasID << ", new m_id: " << m_id << ")" << std::endl;
         }
         if (mIDDiff < 1) {
-          std::cout << "got the same packet again, (last m_id: " << lastMeasID << ", new m_id: " << m_id << ")" << std::endl;
+          std::cout << "[" << timeStamp << "] got the same packet again, (last m_id: " << lastMeasID << ", new m_id: " << m_id << ")" << std::endl;
         }
       }
       lastMeasID = m_id;
@@ -174,7 +175,7 @@ bool Sensor::readLidarPacket(const ouster::sensor::client_state & state, uint8_t
     if (success)
       return true;
   }
-  std::cout << "INVALID CALL TO readLidarPacket() !!!" << std::endl;
+  ouster::sensor::logger().warn("INVALID CALL TO readLidarPacket() !!!");
   return false;
 }
 
