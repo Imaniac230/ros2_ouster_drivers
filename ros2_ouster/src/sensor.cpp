@@ -46,7 +46,7 @@ void Sensor::configure(
   rclcpp_lifecycle::LifecycleNode::SharedPtr node)
 {
   RCLCPP_INFO(
-    node->get_logger(), 
+    node->get_logger(),
     "Configuring Ouster driver node.");
 
   // Check the validity of some of the retrieved parameters
@@ -60,7 +60,7 @@ void Sensor::configure(
             "Invalid timestamp mode: " + config.timestamp_mode);
   }
 
-  // Report to the user whether automatic address detection is being used, and 
+  // Report to the user whether automatic address detection is being used, and
   // what the source / destination IPs are
   if (config.lidar_ip.empty()) {
     throw ros2_ouster::OusterDriverException(
@@ -149,12 +149,14 @@ bool Sensor::readLidarPacket(const ouster::sensor::client_state & state, uint8_t
     const auto pf = this->getPacketFormat();
     const bool success = ouster::sensor::read_lidar_packet(*_ouster_client, buf, pf);
 
-    const auto timeStamp = std::chrono::high_resolution_clock::now().time_since_epoch().count();
-    if (!success) std::cout << "[" << timeStamp << "] ERROR reading lidar packet!" << std::endl;
+    const auto timeStamp = std::chrono::high_resolution_clock::now();
+    const auto timeDiff = (timeStamp - lastTimeStamp).count();
+    const auto epochStamp = timeStamp.time_since_epoch().count();
+    if (!success) std::cout << "[" << epochStamp << "] ERROR reading lidar packet! (time diff: " << std::setw(10) << timeDiff << std::setw(0) << " ns)" << std::endl;
     const uint16_t f_id = pf.frame_id(buf);
     const uint16_t fIDDiff = f_id - lastFrameID;
     if (fIDDiff > 1) {
-      std::cout << "[" << timeStamp << "] missing " << (fIDDiff - 1) << " whole frames (last f_id: " << lastFrameID << ", new f_id: " << f_id << ")" << std::endl;
+      std::cout << "[" << epochStamp << "] missing " << (fIDDiff - 1) << " whole frames (last f_id: " << lastFrameID << ", new f_id: " << f_id << ", time diff: " << std::setw(10) << timeDiff << std::setw(0) << " ns)" << std::endl;
     }
     for (int icol = 0; icol < pf.columns_per_packet; icol++) {
       const uint8_t* col_buf = pf.nth_col(icol, buf);
@@ -162,15 +164,17 @@ bool Sensor::readLidarPacket(const ouster::sensor::client_state & state, uint8_t
       if (f_id == lastFrameID) {
         const uint16_t mIDDiff = m_id - lastMeasID;
         if (mIDDiff > 1) {
-          std::cout << "[" << timeStamp << "] missing " << (mIDDiff + 1) / 16 << " packets (last m_id: " << lastMeasID << ", new m_id: " << m_id << ")" << std::endl;
+          std::cout << "[" << epochStamp << "] missing " << (mIDDiff + 1) / 16 << " packets (last m_id: " << lastMeasID << ", new m_id: " << m_id << ", time diff: " << std::setw(10) << timeDiff << std::setw(0) << " ns)" << std::endl;
         }
         if (mIDDiff < 1) {
-          std::cout << "[" << timeStamp << "] got the same packet again, (last m_id: " << lastMeasID << ", new m_id: " << m_id << ")" << std::endl;
+          std::cout << "[" << epochStamp << "] got the same packet again, (last m_id: " << lastMeasID << ", new m_id: " << m_id << ", time diff: " << std::setw(10) << timeDiff << std::setw(0) << " ns)" << std::endl;
         }
       }
       lastMeasID = m_id;
     }
     lastFrameID = f_id;
+    lastTimeStamp = timeStamp;
+//    std::cout << "time diff: " << std::setw(10) << timeDiff << std::setw(0) << " ns" << std::endl;
 
     if (success)
       return true;
