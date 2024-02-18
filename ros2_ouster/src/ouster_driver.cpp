@@ -237,6 +237,13 @@ void OusterDriver::processData() {
         it->second->process(_lidar_packet_buf->head(), override_ts);
       }
       _lidar_packet_buf->pop();
+
+      readCounter += 1;
+      uint64_t counterMax = UINT64_MAX;
+      readCounter.compare_exchange_strong(counterMax, 0);
+      const uint64_t counterDiff = writeCounter.load() - readCounter.load();
+      if (counterDiff > 0)
+        std::cout << "unprocessed packets: " << counterDiff << " (written: " << writeCounter.load() << ", read: " << readCounter.load() << ")" << std::endl;
     }
 
     // If we have data in the imu buffer, process it
@@ -277,6 +284,10 @@ void OusterDriver::receiveData()
             RCLCPP_WARN(this->get_logger(), "Lidar buffer overrun!");
           }
           _lidar_packet_buf->push();
+
+          writeCounter += 1;
+          uint64_t counterMax = UINT64_MAX;
+          writeCounter.compare_exchange_strong(counterMax, 0);
         }
 
         if (got_imu) {

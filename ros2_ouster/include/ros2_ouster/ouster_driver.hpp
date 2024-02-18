@@ -191,7 +191,7 @@ private:
   std::thread _process_thread;
   std::condition_variable _process_cond;
   std::mutex _ringbuffer_mutex;
-  std::atomic_bool _processing_active;
+  std::atomic_bool _processing_active = {false};
 
   int _poll_error_count = 0;
   static constexpr int _max_poll_error_count = 10;
@@ -199,6 +199,8 @@ private:
   static constexpr int _max_lidar_packet_error_count = 60;
   int _imu_packet_error_count = 0;
   static constexpr int _max_imu_packet_error_count = 60;
+
+  std::atomic_uint64_t writeCounter = {0}, readCounter = {0};
 };
 
 }  // namespace ros2_ouster
