@@ -218,6 +218,7 @@ void OusterDriver::processData() {
     _data_processors.equal_range(ouster::sensor::client_state::IMU_DATA);
 
   std::unique_lock<std::mutex> ringbuffer_guard(_ringbuffer_mutex);
+  auto printed = std::chrono::high_resolution_clock::now();
   while (_processing_active.load()) {
     // Wait for data in either the lidar or imu ringbuffer
     _process_cond.wait(
@@ -238,12 +239,15 @@ void OusterDriver::processData() {
       }
       _lidar_packet_buf->pop();
 
-      readCounter += 1;
+      ++readCounter;
       uint64_t counterMax = UINT64_MAX;
       readCounter.compare_exchange_strong(counterMax, 0);
       const uint64_t counterDiff = writeCounter.load() - readCounter.load();
-      if (counterDiff > 0)
-        std::cout << "unprocessed packets: " << counterDiff << " (written: " << writeCounter.load() << ", read: " << readCounter.load() << ")" << std::endl;
+//      if ((counterDiff > 0) && ((std::chrono::high_resolution_clock::now() - printed) > std::chrono::milliseconds(20))) {
+//        std::cout << "unprocessed packets: " << counterDiff << " (written: " << writeCounter.load() << ", read: " << readCounter.load() << ")" << std::endl;
+//        std::cout << "buffer active items: " << _lidar_packet_buf->size() << std::endl;
+//        printed = std::chrono::high_resolution_clock::now();
+//      }
     }
 
     // If we have data in the imu buffer, process it
@@ -284,10 +288,6 @@ void OusterDriver::receiveData()
             RCLCPP_WARN(this->get_logger(), "Lidar buffer overrun!");
           }
           _lidar_packet_buf->push();
-
-          writeCounter += 1;
-          uint64_t counterMax = UINT64_MAX;
-          writeCounter.compare_exchange_strong(counterMax, 0);
         }
 
         if (got_imu) {
@@ -332,7 +332,12 @@ bool OusterDriver::handleLidarPacket(const ouster::sensor::client_state & state)
     return false;
   }
 
-  if (!_sensor->readLidarPacket(state, _lidar_packet_buf->tail())) {
+  const auto timeStamp = std::chrono::high_resolution_clock::now();
+  const auto timeDiff = (timeStamp - lastTimeStamp).count();
+  const auto epochStamp = timeStamp.time_since_epoch().count();
+  uint8_t* buf = _lidar_packet_buf->tail();
+
+  if (!_sensor->readLidarPacket(state, buf)) {
     if (++_lidar_packet_error_count > _max_lidar_packet_error_count) {
       RCLCPP_ERROR_STREAM(
               get_logger(),
@@ -341,6 +346,7 @@ bool OusterDriver::handleLidarPacket(const ouster::sensor::client_state & state)
       _lidar_packet_error_count = 0;
       reactivate_sensor(true);
     }
+    std::cout << "[" << epochStamp << "] ERROR reading lidar packet! (time diff: " << std::setw(10) << timeDiff << std::setw(0) << " ns)" << std::endl;
     return false;
   }
 
@@ -352,6 +358,33 @@ bool OusterDriver::handleLidarPacket(const ouster::sensor::client_state & state)
     reactivate_sensor(false);
     return false;
   }
+
+  const auto pf = _sensor->getPacketFormat();
+  const uint16_t f_id = pf.frame_id(buf);
+  ++writeCounter;
+  uint64_t counterMax = UINT64_MAX;
+  writeCounter.compare_exchange_strong(counterMax, 0);
+  const uint16_t fIDDiff = f_id - lastFrameID;
+  if (fIDDiff > 1) {
+    std::cout << "[" << epochStamp << "] missing " << (fIDDiff - 1) << " whole frames (last f_id: " << lastFrameID << ", new f_id: " << f_id << ", time diff: " << std::setw(10) << timeDiff << std::setw(0) << " ns)" << std::endl;
+  }
+  for (int icol = 0; icol < pf.columns_per_packet; icol++) {
+    const uint8_t* col_buf = pf.nth_col(icol, buf);
+    const uint16_t m_id = pf.col_measurement_id(col_buf);
+    if (f_id == lastFrameID) {
+      const uint16_t mIDDiff = m_id - lastMeasID;
+      if (mIDDiff > 1) {
+        std::cout << "[" << epochStamp << "] missing " << (mIDDiff + 1) / 16 << " packets (last m_id: " << lastMeasID << ", new m_id: " << m_id << ", time diff: " << std::setw(10) << timeDiff << std::setw(0) << " ns)" << std::endl;
+      }
+      if (mIDDiff < 1) {
+        std::cout << "[" << epochStamp << "] got the same packet again, (last m_id: " << lastMeasID << ", new m_id: " << m_id << ", time diff: " << std::setw(10) << timeDiff << std::setw(0) << " ns)" << std::endl;
+      }
+    }
+    lastMeasID = m_id;
+  }
+  lastFrameID = f_id;
+  lastTimeStamp = timeStamp;
+  //    std::cout << "time diff: " << std::setw(10) << timeDiff << std::setw(0) << " ns" << std::endl;
 
   return true;
 }

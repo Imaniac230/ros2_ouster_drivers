@@ -94,6 +94,11 @@ public:
     _tail = (_tail + 1) % (_num_elements * 2);
   }
 
+  size_t size()
+  {
+    return (_tail - _head);
+  }
+
 protected:
   // The size of each individual element in bytes and the max number of elements in the buffer
   const std::size_t _element_size;

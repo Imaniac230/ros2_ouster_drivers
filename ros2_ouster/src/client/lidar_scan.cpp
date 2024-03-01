@@ -461,6 +461,8 @@ bool ScanBatcher::operator()(const uint8_t * packet_buf, LidarScan & ls)
       packets_accumulated = 0;
     }
 
+//    if (ls.frame_id > static_cast<uint16_t>(f_id))
+//      std::cout << "f_id diff: " << ls.frame_id - f_id << " (old: " << ls.frame_id << ", new: " << f_id << ")" << std::endl;
     // drop reordered packets from any previous frames
     //TODO(frame-reorder): verify we didn't actually brake processing with this
     if (ls.frame_id > static_cast<uint16_t>(f_id)) return false;

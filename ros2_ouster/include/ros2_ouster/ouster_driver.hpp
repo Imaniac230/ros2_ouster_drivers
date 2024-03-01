@@ -200,6 +200,9 @@ private:
   int _imu_packet_error_count = 0;
   static constexpr int _max_imu_packet_error_count = 60;
 
+  uint16_t lastFrameID = -1;
+  uint16_t lastMeasID = -1;
+  std::chrono::time_point<std::chrono::high_resolution_clock> lastTimeStamp = std::chrono::high_resolution_clock::now();
   std::atomic_uint64_t writeCounter = {0}, readCounter = {0};
 };
 
